@@ -52,6 +52,20 @@ No web target — `expo-secure-store` is a no-op on web and the backend's
 origin-check middleware only allows its configured `ALLOWED_ORIGINS` anyway.
 Use the Next.js frontend for browsers.
 
+## EAS builds (one-time setup)
+
+`eas.json` has three profiles: `development` (dev client + simulators),
+`preview` (installable Android APK), `production` (store AAB/IPA). To activate:
+
+```bash
+npx eas-cli@latest login    # Expo account (free)
+npx eas-cli@latest init     # links this repo, writes projectId into app.json
+```
+
+Then `eas build --platform android --profile preview` produces a shareable
+APK. The `EAS Build` workflow does the same on `v*` tags once an `EXPO_TOKEN`
+repo secret exists (expo.dev → account settings → access tokens).
+
 ## Stubbed / TODO
 
 - POSTs don't send `X-Idempotency-Key` (optional — the middleware passes requests
