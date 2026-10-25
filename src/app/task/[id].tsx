@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useLocalSearchParams } from 'expo-router';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { useAuth } from '@/api/auth';
 import { tasksApi } from '@/api/client';
 import { Colors, Spacing } from '@/constants/colors';
 
@@ -22,11 +23,12 @@ function MetaRow({ label, value }: { label: string; value: string | null }) {
 export default function TaskDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const taskId = Number(id);
+  const { token } = useAuth();
 
   const { data: task, isLoading, error } = useQuery({
     queryKey: ['tasks', taskId],
     queryFn: () => tasksApi.get(taskId),
-    enabled: Number.isFinite(taskId),
+    enabled: Number.isFinite(taskId) && !!token,
   });
 
   if (isLoading) {

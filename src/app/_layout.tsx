@@ -5,11 +5,20 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 
 import { hydrateAuth, useAuth } from '@/api/auth';
+import { ApiError } from '@/api/client';
 import { Colors } from '@/constants/colors';
 
-SplashScreen.preventAutoHideAsync();
+void SplashScreen.preventAutoHideAsync();
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      // 4xx (401/404/422) is deterministic — retrying just delays the error UI
+      // and re-fires the unauthorized handler.
+      retry: (n, e) => (e instanceof ApiError && e.status >= 400 && e.status < 500 ? false : n < 3),
+    },
+  },
+});
 
 export default function RootLayout() {
   const { token, hydrated } = useAuth();
@@ -17,7 +26,7 @@ export default function RootLayout() {
   const router = useRouter();
 
   useEffect(() => {
-    hydrateAuth().finally(() => SplashScreen.hideAsync());
+    hydrateAuth().finally(() => void SplashScreen.hideAsync());
   }, []);
 
   // Auth gate: no stored token → /login; token on /login → tasks.

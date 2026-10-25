@@ -134,7 +134,7 @@ export default function LoginScreen() {
             autoCapitalize="none"
             autoCorrect={false}
             autoComplete="email"
-            textContentType="emailAddress"
+            textContentType="username"
             keyboardType="email-address"
             value={email}
             onChangeText={setEmail}
