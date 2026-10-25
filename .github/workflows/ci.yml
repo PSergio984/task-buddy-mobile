@@ -50,6 +50,9 @@ jobs:
       - name: Format check
         run: npx prettier --check .
 
+      - name: Security audit
+        run: npm audit --audit-level=high
+
   sonarcloud:
     name: SonarCloud scan
     runs-on: ubuntu-latest
