@@ -27,13 +27,13 @@ npx expo start              # then press 'a' for Android, 'i' for iOS
 
 ## What's wired
 
-| Screen / file            | Endpoint                                              |
-| ------------------------ | ----------------------------------------------------- |
-| `src/app/login.tsx`      | `POST /api/v1/users/token` (login) · `POST /api/v1/users/register` |
-| `src/app/(tabs)/index`   | `GET /api/v1/tasks/` (list, pull-to-refresh) · `POST /api/v1/tasks/` (quick add by title) |
-| `src/app/task/[id].tsx`  | `GET /api/v1/tasks/{id}` (detail + subtasks + tags)   |
-| `src/app/(tabs)/plan`    | `POST /api/v1/plan` → tonight / tomorrow / later buckets |
-| Sign out (Tasks header)  | `POST /api/v1/users/logout` + local token clear       |
+| Screen / file           | Endpoint                                                                                  |
+| ----------------------- | ----------------------------------------------------------------------------------------- |
+| `src/app/login.tsx`     | `POST /api/v1/users/token` (login) · `POST /api/v1/users/register`                        |
+| `src/app/(tabs)/index`  | `GET /api/v1/tasks/` (list, pull-to-refresh) · `POST /api/v1/tasks/` (quick add by title) |
+| `src/app/task/[id].tsx` | `GET /api/v1/tasks/{id}` (detail + subtasks + tags)                                       |
+| `src/app/(tabs)/plan`   | `POST /api/v1/plan` → tonight / tomorrow / later buckets                                  |
+| Sign out (Tasks header) | `POST /api/v1/users/logout` + local token clear                                           |
 
 Auth token is persisted in `expo-secure-store`; the root layout
 (`src/app/_layout.tsx`) redirects to `/login` when no token is found and back to
