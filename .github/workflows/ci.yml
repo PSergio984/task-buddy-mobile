@@ -50,6 +50,14 @@ jobs:
       - name: Format check
         run: npx prettier --check .
 
+      - name: Test
+        run: npm run test:ci
+
+      # Expo has no `npm run build` — `expo export` produces the production
+      # JS bundles for both platforms, which is the real build check.
+      - name: Build (export bundles)
+        run: npx expo export --output-dir dist
+
       # critical-only: the 3 current "high" findings are all zod DoS inside
       # dev-time tooling (@expo/cli, eslint-config-expo) — none ship to the app.
       # Upstream publishes no patched zod 3.x and zod 4 is API-breaking, so the

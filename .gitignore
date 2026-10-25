@@ -43,3 +43,6 @@ example
 /ios
 /android
 graphify-out/
+coverage/
+dist/
+dist-test/
