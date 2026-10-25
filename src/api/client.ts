@@ -7,13 +7,7 @@
  */
 import * as SecureStore from 'expo-secure-store';
 
-import type {
-  PlanRequest,
-  PlanResponse,
-  Task,
-  TaskCreateData,
-  TaskListParams,
-} from './types';
+import type { PlanRequest, PlanResponse, Task, TaskCreateData, TaskListParams } from './types';
 
 export const TOKEN_STORAGE_KEY = 'task-buddy.access-token';
 
@@ -112,7 +106,8 @@ export const tasksApi = {
     return apiFetch<Task[]>(`/api/v1/tasks/${qs ? `?${qs}` : ''}`);
   },
   get: (id: number) => apiFetch<Task>(`/api/v1/tasks/${id}`),
-  create: (task: TaskCreateData) => apiFetch<Task>('/api/v1/tasks/', { method: 'POST', json: task }),
+  create: (task: TaskCreateData) =>
+    apiFetch<Task>('/api/v1/tasks/', { method: 'POST', json: task }),
 };
 
 export const planApi = {

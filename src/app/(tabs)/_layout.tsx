@@ -27,7 +27,8 @@ export default function TabsLayout() {
         tabBarActiveTintColor: Colors.accent,
         tabBarInactiveTintColor: Colors.textSecondary,
         headerRight: () => <SignOutButton />,
-      }}>
+      }}
+    >
       <Tabs.Screen
         name="index"
         options={{

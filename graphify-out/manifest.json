@@ -1,0 +1,170 @@
+{
+  ".claude/settings.json": {
+    "mtime": 1793081725.6347568,
+    "seen": 1793083147.840829,
+    "ast_hash": "dc580fca35a0e98ed20777ede5e545a1",
+    "semantic_hash": ""
+  },
+  ".vscode/extensions.json": {
+    "mtime": 1793081725.5699813,
+    "seen": 1793083147.8408325,
+    "ast_hash": "b2354ba0225f5689d13651ec0fac0de0",
+    "semantic_hash": ""
+  },
+  ".vscode/settings.json": {
+    "mtime": 1793081725.5709832,
+    "seen": 1793083147.8408344,
+    "ast_hash": "6b9302c1f72c315e90233c7539c48c9f",
+    "semantic_hash": ""
+  },
+  "app.json": {
+    "mtime": 1793082956.1271899,
+    "seen": 1793083147.8408353,
+    "ast_hash": "0b052b140657a99339aaaf9b9d10114e",
+    "semantic_hash": ""
+  },
+  "assets/expo.icon/icon.json": {
+    "mtime": 1793081725.5759895,
+    "seen": 1793083147.8408363,
+    "ast_hash": "35cb915a0bebbebbe69cf7815e174462",
+    "semantic_hash": ""
+  },
+  "eslint.config.js": {
+    "mtime": 1793082047.4165123,
+    "seen": 1793083147.840837,
+    "ast_hash": "560a864580ad8107fbbf8d6d452c82fe",
+    "semantic_hash": ""
+  },
+  "package.json": {
+    "mtime": 1793082608.0569968,
+    "seen": 1793083147.840838,
+    "ast_hash": "6c5ab54f71e81da1a7a2c428c38cba58",
+    "semantic_hash": ""
+  },
+  "src/api/auth.ts": {
+    "mtime": 1793082545.9922645,
+    "seen": 1793083147.840839,
+    "ast_hash": "c883d618fbec154c54c2f1643896a22f",
+    "semantic_hash": ""
+  },
+  "src/api/client.ts": {
+    "mtime": 1793082545.689623,
+    "seen": 1793083147.8408394,
+    "ast_hash": "84c33d010c15a5710097f004545fbb78",
+    "semantic_hash": ""
+  },
+  "src/api/types.ts": {
+    "mtime": 1793082055.9544485,
+    "seen": 1793083147.84084,
+    "ast_hash": "18701dead412935f64a06d640af40679",
+    "semantic_hash": ""
+  },
+  "src/app/(tabs)/_layout.tsx": {
+    "mtime": 1793081968.7389605,
+    "seen": 1793083147.840841,
+    "ast_hash": "dce8063cc51de015e12b4ae2b14589b0",
+    "semantic_hash": ""
+  },
+  "src/app/(tabs)/index.tsx": {
+    "mtime": 1793082574.6198914,
+    "seen": 1793083147.840842,
+    "ast_hash": "8a4c1f6274bf82963c6a0b5ea55c2a15",
+    "semantic_hash": ""
+  },
+  "src/app/(tabs)/plan.tsx": {
+    "mtime": 1793082574.827567,
+    "seen": 1793083147.8408425,
+    "ast_hash": "5c7160840f3f835f67cce34fd23709f7",
+    "semantic_hash": ""
+  },
+  "src/app/_layout.tsx": {
+    "mtime": 1793082956.3456433,
+    "seen": 1793083147.8408432,
+    "ast_hash": "8d76eed6b0a715459bbca9270e01e892",
+    "semantic_hash": ""
+  },
+  "src/app/login.tsx": {
+    "mtime": 1793082956.389741,
+    "seen": 1793083147.8408437,
+    "ast_hash": "4955cd5985219575dc7cd5758129cb18",
+    "semantic_hash": ""
+  },
+  "src/app/task/[id].tsx": {
+    "mtime": 1793082956.2247708,
+    "seen": 1793083147.8408446,
+    "ast_hash": "73c069b7db1bc94a94e3dd59235d4c7f",
+    "semantic_hash": ""
+  },
+  "src/constants/colors.ts": {
+    "mtime": 1793082592.2153563,
+    "seen": 1793083147.8408453,
+    "ast_hash": "bbd3b2912f0c6f2e2b7b6dabc305cc00",
+    "semantic_hash": ""
+  },
+  "tsconfig.json": {
+    "mtime": 1793081725.6161642,
+    "seen": 1793083147.8408458,
+    "ast_hash": "6794be22dd9dd00003515895d3b4ff06",
+    "semantic_hash": ""
+  },
+  "AGENTS.md": {
+    "mtime": 1791980474.621919,
+    "seen": 1793083147.8408465,
+    "ast_hash": "233d1484702a528f5dcb4333cd01bb43",
+    "semantic_hash": ""
+  },
+  "README.md": {
+    "mtime": 1793082592.4271123,
+    "seen": 1793083147.840847,
+    "ast_hash": "88f6b1c9a0a195b294485f974fd04b9b",
+    "semantic_hash": ""
+  },
+  "assets/expo.icon/Assets/expo-symbol 2.svg": {
+    "mtime": 1793081725.5739875,
+    "seen": 1793083147.840848,
+    "ast_hash": "6979b664c1ce82c10426a051082412a7",
+    "semantic_hash": ""
+  },
+  "assets/expo.icon/Assets/grid.png": {
+    "mtime": 1793081725.5749896,
+    "seen": 1793083147.8408484,
+    "ast_hash": "37cdeda9d1af5d7432716d9671b098da",
+    "semantic_hash": ""
+  },
+  "assets/images/android-icon-background.png": {
+    "mtime": 1793081725.5779893,
+    "seen": 1793083147.8408496,
+    "ast_hash": "2d65569cc0e2afdcea0af9f9902d4173",
+    "semantic_hash": ""
+  },
+  "assets/images/android-icon-foreground.png": {
+    "mtime": 1793081725.5789888,
+    "seen": 1793083147.84085,
+    "ast_hash": "72e71a9c846c6aa4ae32476641a00e18",
+    "semantic_hash": ""
+  },
+  "assets/images/android-icon-monochrome.png": {
+    "mtime": 1793081725.5799892,
+    "seen": 1793083147.8408508,
+    "ast_hash": "1e097dab989759fc0b69440092ca22cd",
+    "semantic_hash": ""
+  },
+  "assets/images/favicon.png": {
+    "mtime": 1793081725.5829883,
+    "seen": 1793083147.8408518,
+    "ast_hash": "d9f444efbdfbe7931aa93beada07318a",
+    "semantic_hash": ""
+  },
+  "assets/images/icon.png": {
+    "mtime": 1793081725.5874958,
+    "seen": 1793083147.8408523,
+    "ast_hash": "8d892ef03dbd43e8d899c1d605ad42df",
+    "semantic_hash": ""
+  },
+  "assets/images/splash-icon.png": {
+    "mtime": 1793081725.5940797,
+    "seen": 1793083147.840853,
+    "ast_hash": "5ee5db91d59518c45ebcc99a2f5afc57",
+    "semantic_hash": ""
+  }
+}

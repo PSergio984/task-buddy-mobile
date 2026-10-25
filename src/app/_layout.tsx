@@ -51,7 +51,8 @@ export default function RootLayout() {
           headerStyle: { backgroundColor: Colors.background },
           headerTintColor: Colors.text,
           contentStyle: { backgroundColor: Colors.background },
-        }}>
+        }}
+      >
         <Stack.Screen name="login" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="task/[id]" options={{ title: 'Task' }} />

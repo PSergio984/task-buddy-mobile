@@ -25,7 +25,11 @@ export default function TaskDetailScreen() {
   const taskId = Number(id);
   const { token } = useAuth();
 
-  const { data: task, isLoading, error } = useQuery({
+  const {
+    data: task,
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: ['tasks', taskId],
     queryFn: () => tasksApi.get(taskId),
     enabled: Number.isFinite(taskId) && !!token,

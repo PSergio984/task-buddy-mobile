@@ -37,14 +37,14 @@ export default function PlanScreen() {
 
   const plan = useMutation({
     mutationFn: (availableMinutes?: number) =>
-      planApi.generate(availableMinutes === undefined ? {} : { available_minutes: availableMinutes }),
+      planApi.generate(
+        availableMinutes === undefined ? {} : { available_minutes: availableMinutes },
+      ),
   });
 
   function onPlan() {
     const minutes = parseInt(minutesInput, 10);
-    plan.mutate(
-      Number.isFinite(minutes) && minutes >= 0 ? Math.min(minutes, 1440) : undefined,
-    ); // backend caps available_minutes at 1440 (le=1440)
+    plan.mutate(Number.isFinite(minutes) && minutes >= 0 ? Math.min(minutes, 1440) : undefined); // backend caps available_minutes at 1440 (le=1440)
   }
 
   const result = plan.data;
@@ -53,7 +53,8 @@ export default function PlanScreen() {
     <ScrollView
       style={styles.scroll}
       contentContainerStyle={styles.content}
-      keyboardShouldPersistTaps="handled">
+      keyboardShouldPersistTaps="handled"
+    >
       <View style={styles.formRow}>
         <TextInput
           style={styles.input}
@@ -66,7 +67,8 @@ export default function PlanScreen() {
         <Pressable
           style={[styles.planButton, plan.isPending && styles.disabled]}
           disabled={plan.isPending}
-          onPress={onPlan}>
+          onPress={onPlan}
+        >
           {plan.isPending ? (
             <ActivityIndicator color={Colors.background} />
           ) : (
@@ -94,7 +96,8 @@ export default function PlanScreen() {
                   <Pressable
                     key={row.task_id}
                     style={({ pressed }) => [styles.taskRow, pressed && styles.taskRowPressed]}
-                    onPress={() => router.push(`/task/${row.task_id}`)}>
+                    onPress={() => router.push(`/task/${row.task_id}`)}
+                  >
                     <View style={styles.taskText}>
                       <Text style={styles.taskTitle}>
                         {titles.get(row.task_id) ?? `Task #${row.task_id}`}

@@ -32,7 +32,8 @@ function TaskRow({ task, onPress }: TaskRowProps) {
   return (
     <Pressable
       style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-      onPress={() => onPress(task.id)}>
+      onPress={() => onPress(task.id)}
+    >
       <View style={styles.rowText}>
         <Text style={[styles.rowTitle, task.completed && styles.rowTitleDone]} numberOfLines={1}>
           {task.title}
@@ -56,7 +57,13 @@ export default function TasksScreen() {
   const [newTitle, setNewTitle] = useState('');
   const { token } = useAuth();
 
-  const { data: tasks, isLoading, isRefetching, refetch, error } = useQuery({
+  const {
+    data: tasks,
+    isLoading,
+    isRefetching,
+    refetch,
+    error,
+  } = useQuery({
     queryKey: ['tasks'],
     queryFn: () => tasksApi.list(),
     enabled: !!token, // don't fire unauthenticated before the gate redirects
@@ -93,13 +100,12 @@ export default function TasksScreen() {
         <Pressable
           style={[styles.addButton, (!newTitle.trim() || createTask.isPending) && styles.disabled]}
           disabled={!newTitle.trim() || createTask.isPending}
-          onPress={() => createTask.mutate(newTitle.trim())}>
+          onPress={() => createTask.mutate(newTitle.trim())}
+        >
           <Text style={styles.addButtonText}>Add</Text>
         </Pressable>
       </View>
-      {createTask.error ? (
-        <Text style={styles.createError}>{createTask.error.message}</Text>
-      ) : null}
+      {createTask.error ? <Text style={styles.createError}>{createTask.error.message}</Text> : null}
     </View>
   );
 

@@ -83,7 +83,8 @@ export default function LoginScreen() {
           <Pressable
             style={[styles.button, submitting && styles.buttonDisabled]}
             disabled={submitting}
-            onPress={onResend}>
+            onPress={onResend}
+          >
             {submitting ? (
               <ActivityIndicator color={Colors.background} />
             ) : (
@@ -96,7 +97,8 @@ export default function LoginScreen() {
               setMode('login');
               setError(null);
             }}
-            hitSlop={8}>
+            hitSlop={8}
+          >
             <Text style={styles.switchText}>Back to sign in</Text>
           </Pressable>
         </View>
@@ -107,7 +109,8 @@ export default function LoginScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.flex}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <View style={styles.card}>
           <Text style={styles.title}>Task Buddy</Text>
@@ -157,7 +160,8 @@ export default function LoginScreen() {
           <Pressable
             style={[styles.button, !canSubmit && styles.buttonDisabled]}
             disabled={!canSubmit}
-            onPress={onSubmit}>
+            onPress={onSubmit}
+          >
             {submitting ? (
               <ActivityIndicator color={Colors.background} />
             ) : (
@@ -170,9 +174,10 @@ export default function LoginScreen() {
               setMode(isRegister ? 'login' : 'register');
               setError(null);
             }}
-            hitSlop={8}>
+            hitSlop={8}
+          >
             <Text style={styles.switchText}>
-              {isRegister ? 'Already have an account? Sign in' : "No account? Create one"}
+              {isRegister ? 'Already have an account? Sign in' : 'No account? Create one'}
             </Text>
           </Pressable>
         </View>
