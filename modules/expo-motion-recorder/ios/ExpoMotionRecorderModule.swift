@@ -19,8 +19,10 @@ public class ExpoMotionRecorderModule: Module {
     }
 
     AsyncFunction("stopRecording") { () -> Void in
-      // CMSensorRecorder has no cancel API — recording expires with the
-      // requested duration. Kept for symmetry with the Android stub.
+      // CMSensorRecorder has no cancel API, but a new record request
+      // replaces the outstanding one — requesting ~0 duration expires the
+      // 12h window almost immediately instead of sampling past teardown.
+      self.recorder.recordAccelerometer(forDuration: 0.1)
     }
 
     AsyncFunction("queryAccelerometer") { (fromTs: Double, toTs: Double) -> [String: Double]? in
