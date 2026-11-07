@@ -517,9 +517,10 @@ export class PhoneDownSession {
           this.coverageProofTs = null;
           continue;
         }
-        for (const t of drain.transitions) {
-          this.feedEdge({ edge: t.near ? 'face_down' : 'picked_up', ts: t.ts });
-        }
+        // Record this drain's proof BEFORE replaying its edges — a
+        // buffered transition can close a span, and onSpanClosed must
+        // judge coverage with the proof the same drain attested, not
+        // the stale stamp from the previous one.
         if ((drain.dropped ?? 0) > 0) {
           // The buffer overflowed — the replayed history is a suffix with
           // edges lost. Its proofs can't stand: downgrade the affected
@@ -527,6 +528,9 @@ export class PhoneDownSession {
           this.coverageProofTs = null;
         } else if (drain.lastProofTs !== null) {
           this.coverageProofTs = Math.max(this.coverageProofTs ?? 0, drain.lastProofTs);
+        }
+        for (const t of drain.transitions) {
+          this.feedEdge({ edge: t.near ? 'face_down' : 'picked_up', ts: t.ts });
         }
       } catch {
         // One throwing provider must not starve the others' buffered edges.
