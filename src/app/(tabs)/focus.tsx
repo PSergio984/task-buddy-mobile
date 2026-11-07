@@ -281,8 +281,10 @@ export default function FocusScreen() {
       !restored &&
       !paused &&
       // Stop-in-flight must not re-arm sensors mid-teardown — a slow
-      // drain/flush can otherwise leave coverage running past the end.
+      // drain/flush or a pending offline-stop retry can otherwise leave
+      // coverage running past the end.
       busy !== 'stop' &&
+      pendingStopId === null &&
       // A resume landing while disarm() still holds the machine gets arm()
       // =false — pdState in the deps refires this effect when it frees.
       pdState === 'idle'
@@ -301,7 +303,7 @@ export default function FocusScreen() {
         .catch(() => {});
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- arm on session id, resume, intent, or freed machine
-  }, [session?.id, session?.status, paused, phoneDown, pdState, busy]);
+  }, [session?.id, session?.status, paused, phoneDown, pdState, busy, pendingStopId]);
 
   // A session leaving the running state without the Stop button (advance
   // past the last phase, server auto-abandon, phase-level pause) must
