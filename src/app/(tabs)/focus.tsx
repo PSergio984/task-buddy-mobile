@@ -126,8 +126,14 @@ export default function FocusScreen() {
 
   // A timed phase at 0:00 doesn't self-advance — phase transitions are
   // server-lazy, so poll getActive once the local clock reaches expiry
-  // (throttled; a dead server can't spin the loop).
+  // (throttled; a dead server can't spin the loop). The poll resolves
+  // asynchronously — a newer action may have already replaced the session,
+  // so apply only while the polled session is still the current one.
   const expiredPollRef = useRef(0);
+  const sessionIdRef = useRef<number | null>(null);
+  useEffect(() => {
+    sessionIdRef.current = session?.id ?? null;
+  }, [session]);
   const livePhase = session?.phases.find((p) => p.status === 'running' || p.status === 'paused');
   useEffect(() => {
     if (
@@ -141,11 +147,16 @@ export default function FocusScreen() {
     }
     if (Date.now() - expiredPollRef.current < 5_000) return;
     expiredPollRef.current = Date.now();
+    const polledId = session.id;
     sessionsApi
       .getActive()
       .then((res) => {
         alignClock(res?.server_time);
-        if (res?.session) setSession(res.session);
+        // Stale poll for a session we've since replaced — drop it.
+        if (sessionIdRef.current !== polledId) return;
+        // Server says nothing active — the session ended server-side;
+        // leaving the local copy would poll forever at 0:00.
+        setSession(res?.session ?? null);
       })
       .catch(() => {});
   }, [session, view, livePhase]);
