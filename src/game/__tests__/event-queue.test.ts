@@ -131,12 +131,20 @@ describe('EventQueue', () => {
       .mockRejectedValueOnce(new ApiError(0, 'down'))
       .mockRejectedValueOnce(new ApiError(500, 'oops'))
       .mockResolvedValueOnce(okResponse);
-    const { queue, sleeps } = makeQueue({ post });
+    const { queue, sleeps, storage } = makeQueue({ post });
     await queue.enqueue('a', {});
+    await queue.enqueue('b', {});
     const res = await queue.flush();
     expect(res.failed).toBe(false);
     expect(post).toHaveBeenCalledTimes(3);
     expect(sleeps).toEqual([100, 200]); // base * 2^attempt
+    // Two events pin the "queued-behind events aren't posted twice"
+    // guarantee: every attempt carried the same [a,b] chunk, and the
+    // queue drained exactly once — no replay, no loss.
+    for (const call of post.mock.calls) {
+      expect(call[0].map((e: { type: string }) => e.type)).toEqual(['a', 'b']);
+    }
+    expect(storedLen(storage)).toBe(0);
   });
 
   it('gives up after maxAttempts and keeps events queued', async () => {
