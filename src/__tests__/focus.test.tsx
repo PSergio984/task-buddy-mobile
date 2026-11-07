@@ -61,11 +61,11 @@ jest.mock('@/game/phone-down-session', () => ({
   // The screen's reported-spans notice filters on MIN_SPAN_MS — keep the
   // real constant or the notice paths are silently dead under the mock.
   MIN_SPAN_MS: 2_000,
-  // The real mergeSummary merges across arms — the mock's disarm returns
-  // sessionId 7, so the simplest faithful mock is "take next if truthy".
-  mergeSummary: jest.fn((prev: { sessionId: number } | null, next: { sessionId: number } | null) =>
-    next && next.sessionId !== 0 ? next : prev,
-  ),
+  // The real union — a simplified mock can hide evidence loss across
+  // repeated arms (pause → resume → stop must concatenate, not replace).
+  mergeSummary: jest.requireActual<typeof import('@/game/phone-down-session')>(
+    '@/game/phone-down-session',
+  ).mergeSummary,
   PhoneDownSession: jest
     .fn()
     .mockImplementation((deps: { onStateChange?: (s: unknown) => void }) => {
@@ -166,6 +166,19 @@ const pausedSession: GameSession = {
   ],
 };
 
+/** A successful start means the server holds the session — getActive must
+ *  begin returning it (flipped inside the start call) or the expiry poll
+ *  truthfully clears local state. */
+function mockStarted(session: GameSession = liveSession) {
+  (sessionsApi.start as jest.Mock).mockImplementation(async () => {
+    (sessionsApi.getActive as jest.Mock).mockResolvedValue({
+      session,
+      server_time: 't',
+    });
+    return { session, profile: null, server_time: 't' };
+  });
+}
+
 async function renderScreen() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   await render(
@@ -177,6 +190,9 @@ async function renderScreen() {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  // mockStarted() flips getActive to the live session inside start() —
+  // without a reset it leaks into the next test's mount restore.
+  (sessionsApi.getActive as jest.Mock).mockResolvedValue(null);
   mockPdInstances.length = 0;
 });
 
@@ -191,11 +207,7 @@ describe('FocusScreen', () => {
   });
 
   it('start posts a timer session with phases and phone_down off by default', async () => {
-    (sessionsApi.start as jest.Mock).mockResolvedValue({
-      session: liveSession,
-      profile: null,
-      server_time: 't',
-    });
+    mockStarted();
     await renderScreen();
     await act(async () => {
       fireEvent.press(screen.getByText('Start focus'));
@@ -209,11 +221,7 @@ describe('FocusScreen', () => {
   });
 
   it('shows the running view after a successful start', async () => {
-    (sessionsApi.start as jest.Mock).mockResolvedValue({
-      session: liveSession,
-      profile: null,
-      server_time: 't',
-    });
+    mockStarted();
     await renderScreen();
     await act(async () => {
       fireEvent.press(screen.getByText('Start focus'));
@@ -234,11 +242,7 @@ describe('FocusScreen', () => {
   });
 
   it('stop calls the server verb and shows the end card', async () => {
-    (sessionsApi.start as jest.Mock).mockResolvedValue({
-      session: liveSession,
-      profile: null,
-      server_time: 't',
-    });
+    mockStarted();
     (sessionsApi.stop as jest.Mock).mockResolvedValue({
       session: endedSession,
       profile: null,
@@ -257,11 +261,7 @@ describe('FocusScreen', () => {
   });
 
   it('pause disarms the sensors and resume re-arms them', async () => {
-    (sessionsApi.start as jest.Mock).mockResolvedValue({
-      session: pdSession,
-      profile: null,
-      server_time: 't',
-    });
+    mockStarted(pdSession);
     (sessionsApi.pause as jest.Mock).mockResolvedValue({
       session: pausedSession,
       profile: null,
@@ -298,11 +298,7 @@ describe('FocusScreen', () => {
   });
 
   it('start posts phone_down: true when the toggle is on', async () => {
-    (sessionsApi.start as jest.Mock).mockResolvedValue({
-      session: pdSession,
-      profile: null,
-      server_time: 't',
-    });
+    mockStarted(pdSession);
     await renderScreen();
     await act(async () => {
       fireEvent(screen.getByRole('switch', { name: /phone-down/i }), 'onValueChange', true);
@@ -316,11 +312,7 @@ describe('FocusScreen', () => {
   });
 
   it('stop drains phone-down evidence before calling the server verb', async () => {
-    (sessionsApi.start as jest.Mock).mockResolvedValue({
-      session: pdSession,
-      profile: null,
-      server_time: 't',
-    });
+    mockStarted(pdSession);
     (sessionsApi.stop as jest.Mock).mockResolvedValue({
       session: endedSession,
       profile: null,
