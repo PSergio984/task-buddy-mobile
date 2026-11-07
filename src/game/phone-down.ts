@@ -121,7 +121,9 @@ export class FaceDownClassifier {
       return { faceDownSign: this.faceDownSign, quality: 'assumed' };
     }
     const med = median(baselineZ);
-    if (Math.abs(med) < this.flatMin) {
+    // Outside [flatMin, flatMax) isn't a flat reading at all — shaking or
+    // free-fall can't tell the sign either, so it also lands 'assumed'.
+    if (Math.abs(med) < this.flatMin || Math.abs(med) >= this.flatMax) {
       return { faceDownSign: this.faceDownSign, quality: 'assumed' };
     }
     if (Math.sign(med) === this.platformSign) {
