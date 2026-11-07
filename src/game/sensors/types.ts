@@ -38,6 +38,12 @@ export interface DrainResult {
    * coverage story it tells is incomplete and can't promote anything.
    */
   dropped?: number;
+  /**
+   * True when the drain itself failed (native IPC error). A failed drain
+   * is NOT an empty drain — the buffer may still hold rows nobody saw, so
+   * prior proofs can't stand in for data that never arrived.
+   */
+  failed?: boolean;
 }
 
 export interface OrientationProvider {

@@ -509,11 +509,11 @@ export class PhoneDownSession {
           provider.drainTransitions(),
           new Promise<null>((resolve) => setTimeout(() => resolve(null), 15_000)),
         ]);
-        if (drain === null) {
-          // A timed-out drain may have consumed rows natively before the
-          // bound — whatever they described (a pickup!) is lost, and the
-          // next drain's heartbeat can make the gap look covered. Prior
-          // proofs can't stand in for data that never arrived.
+        if (drain === null || drain.failed === true) {
+          // A timed-out or failed drain may have consumed rows natively —
+          // whatever they described (a pickup!) is lost, and the next
+          // drain's heartbeat can make the gap look covered. Prior proofs
+          // can't stand in for data that never arrived.
           this.coverageProofTs = null;
           continue;
         }

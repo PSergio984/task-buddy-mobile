@@ -148,7 +148,9 @@ export class FocusServiceProvider implements OrientationProvider {
         dropped: res?.dropped ?? 0,
       };
     } catch {
-      return { transitions: [], lastProofTs: null };
+      // A failed drain isn't an empty drain — flag it so the caller can
+      // invalidate prior proofs instead of trusting the stale stamp.
+      return { transitions: [], lastProofTs: null, failed: true };
     }
   }
 }
