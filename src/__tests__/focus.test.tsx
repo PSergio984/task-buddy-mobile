@@ -61,6 +61,11 @@ jest.mock('@/game/phone-down-session', () => ({
   // The screen's reported-spans notice filters on MIN_SPAN_MS — keep the
   // real constant or the notice paths are silently dead under the mock.
   MIN_SPAN_MS: 2_000,
+  // The real mergeSummary merges across arms — the mock's disarm returns
+  // sessionId 7, so the simplest faithful mock is "take next if truthy".
+  mergeSummary: jest.fn((prev: { sessionId: number } | null, next: { sessionId: number } | null) =>
+    next && next.sessionId !== 0 ? next : prev,
+  ),
   PhoneDownSession: jest
     .fn()
     .mockImplementation((deps: { onStateChange?: (s: unknown) => void }) => {

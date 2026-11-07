@@ -39,7 +39,9 @@ public class ExpoMotionRecorderModule: Module {
       // can bound which part of the gap the samples actually cover.
       let epochNow = Date().timeIntervalSince1970
       let uptimeNow = ProcessInfo.processInfo.systemUptime
-      for datum in list {
+      // CMSensorDataList is an NSEnumerator, not a Sequence — nextObject()
+      // is the only portable traversal (for-in does not compile).
+      while let datum = list.nextObject() {
         guard let sample = datum as? CMRecordedAccelerometerData else { continue }
         let z = sample.acceleration.z
         minZ = min(minZ, z)

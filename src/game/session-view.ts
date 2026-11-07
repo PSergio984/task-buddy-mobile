@@ -35,6 +35,13 @@ export interface PhaseDurations {
 const clampInt = (v: number, lo: number, hi: number) =>
   Math.min(hi, Math.max(lo, Math.round(Number.isFinite(v) ? v : lo)));
 
+/** Form-field parse — a non-numeric custom duration falls back to the
+ *  preset default rather than rejecting the whole start. */
+export const numOr = (text: string, fallback: number) => {
+  const n = parseInt(text, 10);
+  return Number.isFinite(n) ? n : fallback;
+};
+
 /** Expand durations into the flat phase list SessionStartIn.phases expects
  *  (same clamps as web buildPhasePlan: 1–600 min legs, 1–8 cycles). */
 export function buildPhasePlan(durations: PhaseDurations, cycles = 4): SessionPhaseIn[] {

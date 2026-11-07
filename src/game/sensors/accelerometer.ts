@@ -39,7 +39,11 @@ export class AccelerometerOrientationProvider implements OrientationProvider {
     return this.lastSample;
   }
 
-  get stillFlat(): boolean {
+  /** Tri-state: undefined while calibrating or before any sample — the
+   *  classifier hasn't measured yet, so neither 'down' nor 'up' claims
+   *  are honest. `false` means a fresh sample measured upright. */
+  get stillFlat(): boolean | undefined {
+    if (this.calibrating || this.lastSample === null) return undefined;
     return this.classifier.isDown;
   }
 

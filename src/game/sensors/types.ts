@@ -55,8 +55,9 @@ export interface OrientationProvider {
    * silence is normal, not death.
    */
   readonly lastSampleAt?: number | null;
-  /** Continuous emitters only: true while the freshest reading still says
-   *  face-down — corroborates (or vetoes) an event-driven pickup edge. */
+  /** Continuous emitters only: the freshest reading's measured direction
+   *  — corroborates (or vetoes) an event-driven edge. `undefined` = not
+   *  yet measured (calibrating/no samples); `false` = measured upright. */
   readonly stillFlat?: boolean;
   isAvailable(): Promise<boolean>;
   /** Begin streaming orientation edges. */

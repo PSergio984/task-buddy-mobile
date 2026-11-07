@@ -34,35 +34,21 @@ import { usePhoneDownHistory } from '@/components/focus/use-phone-down-history';
 import { Colors, Spacing } from '@/constants/colors';
 import { createEventQueue } from '@/game/event-queue';
 import type { PhoneDownState } from '@/game/phone-down';
-import { MIN_SPAN_MS, PhoneDownSession, type PhoneDownSummary } from '@/game/phone-down-session';
-import { buildPhasePlan, deriveSessionView, FOCUS_PRESETS, formatClock } from '@/game/session-view';
+import {
+  mergeSummary,
+  MIN_SPAN_MS,
+  PhoneDownSession,
+  type PhoneDownSummary,
+} from '@/game/phone-down-session';
+import {
+  buildPhasePlan,
+  deriveSessionView,
+  FOCUS_PRESETS,
+  formatClock,
+  numOr,
+} from '@/game/session-view';
 
 const KEEP_AWAKE_TAG = 'phone-down-session';
-
-const numOr = (text: string, fallback: number) => {
-  const n = parseInt(text, 10);
-  return Number.isFinite(n) ? n : fallback;
-};
-
-/** Accumulate per-arm evidence summaries — a pause/toggle-off disarm already
- *  flushed its spans to the server, so the end card must count them too. */
-const mergeSummary = (
-  prev: PhoneDownSummary | null,
-  next: PhoneDownSummary | null,
-): PhoneDownSummary | null => {
-  // sessionId 0 = emitEvidence ran on an already-idle machine (disarm
-  // after stop, terminal effect while idle): carries no evidence, and
-  // must not wipe spans an earlier arm accumulated.
-  if (!next || next.sessionId === 0) return prev;
-  if (!prev || prev.sessionId !== next.sessionId) return next;
-  return {
-    sessionId: next.sessionId,
-    spans: [...prev.spans, ...next.spans],
-    violations: [...prev.violations, ...next.violations],
-    syncFailed: prev.syncFailed || next.syncFailed,
-    evidenceDropped: prev.evidenceDropped + next.evidenceDropped,
-  };
-};
 
 export default function FocusScreen() {
   const { token } = useAuth();
@@ -129,6 +115,15 @@ export default function FocusScreen() {
   /** Phase-level pause — the session row stays 'active' throughout. */
   const paused = view?.status === 'paused';
 
+  /** Server-clock offset — every response carries server_time; anchoring
+   *  `now` to it keeps the countdown honest when the device clock skews. */
+  const clockOffsetRef = useRef(0);
+  const alignClock = (serverTime?: string) => {
+    const t = serverTime ? Date.parse(serverTime) : NaN;
+    if (Number.isFinite(t)) clockOffsetRef.current = t - Date.now();
+  };
+  const serverNow = () => Date.now() + clockOffsetRef.current;
+
   // A timed phase at 0:00 doesn't self-advance — phase transitions are
   // server-lazy, so poll getActive once the local clock reaches expiry
   // (throttled; a dead server can't spin the loop).
@@ -149,6 +144,7 @@ export default function FocusScreen() {
     sessionsApi
       .getActive()
       .then((res) => {
+        alignClock(res?.server_time);
         if (res?.session) setSession(res.session);
       })
       .catch(() => {});
@@ -159,7 +155,7 @@ export default function FocusScreen() {
   useEffect(() => {
     if (!session || session.status !== 'active') return;
     const id = setInterval(() => {
-      setNow(Date.now());
+      setNow(serverNow());
       setPdCovering(pd.liveCovering);
       setPdGraceLeft(pd.state === 'grace' ? pd.graceRemainingMs() : null);
     }, 1000);
@@ -177,6 +173,7 @@ export default function FocusScreen() {
     sessionsApi
       .getActive()
       .then((res) => {
+        alignClock(res?.server_time);
         if (!cancelled && res?.session && !localStartRef.current) {
           setSession(res.session);
           setRestored(true);
@@ -223,13 +220,14 @@ export default function FocusScreen() {
       : fallback;
 
   const applyAction = async (
-    action: () => Promise<{ session: GameSession } | null>,
+    action: () => Promise<{ session: GameSession; server_time?: string } | null>,
     verb: string,
   ) => {
     setBusy(verb);
     setError(null);
     try {
       const res = await action();
+      alignClock(res?.server_time);
       if (res?.session) setSession(res.session);
     } catch (e) {
       setError(apiErr(e, `Could not ${verb} the session.`));
@@ -282,6 +280,9 @@ export default function FocusScreen() {
       phoneDown &&
       !restored &&
       !paused &&
+      // Stop-in-flight must not re-arm sensors mid-teardown — a slow
+      // drain/flush can otherwise leave coverage running past the end.
+      busy !== 'stop' &&
       // A resume landing while disarm() still holds the machine gets arm()
       // =false — pdState in the deps refires this effect when it frees.
       pdState === 'idle'
@@ -289,12 +290,18 @@ export default function FocusScreen() {
       void pd
         .arm(session.id)
         .then((armed) => {
-          if (armed && mountedRef.current) activateKeepAwake();
+          if (armed && mountedRef.current) {
+            activateKeepAwake();
+          } else if (mountedRef.current) {
+            // arm() returned false — no provider could start. A silent
+            // refusal makes the toggle look broken on retry.
+            setNotice('Phone-down unavailable — no orientation sensor could start.');
+          }
         })
         .catch(() => {});
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- arm on session id, resume, intent, or freed machine
-  }, [session?.id, session?.status, paused, phoneDown, pdState]);
+  }, [session?.id, session?.status, paused, phoneDown, pdState, busy]);
 
   // A session leaving the running state without the Stop button (advance
   // past the last phase, server auto-abandon, phase-level pause) must
@@ -336,6 +343,8 @@ export default function FocusScreen() {
         if (paused || session.phone_down == null) return;
         if ((await pd.arm(session.id).catch(() => false)) && mountedRef.current) {
           activateKeepAwake();
+        } else if (mountedRef.current) {
+          setNotice('Phone-down unavailable — no orientation sensor could start.');
         }
       } else {
         releaseKeepAwake();
@@ -375,6 +384,7 @@ export default function FocusScreen() {
         }
       }
       const res = await sessionsApi.stop(session.id);
+      alignClock(res.server_time);
       setSession(res.session);
       setPendingStopId(null);
     } catch (e) {
@@ -399,6 +409,7 @@ export default function FocusScreen() {
       sessionsApi
         .stop(pendingStopId)
         .then((res) => {
+          alignClock(res.server_time);
           setSession(res.session);
           setPendingStopId(null);
           setError(null);

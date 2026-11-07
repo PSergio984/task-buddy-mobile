@@ -37,6 +37,25 @@ export interface ResolvedSpan extends PhoneDownSpan {
   evidence: Evidence;
 }
 
+/** Accumulate per-arm evidence summaries — a pause/toggle-off disarm
+ *  already flushed its spans, so the end card must union them across
+ *  arms. A {sessionId:0} placeholder carries no evidence and must not
+ *  wipe spans an earlier arm accumulated. */
+export function mergeSummary(
+  prev: PhoneDownSummary | null,
+  next: PhoneDownSummary | null,
+): PhoneDownSummary | null {
+  if (!next || next.sessionId === 0) return prev;
+  if (!prev || prev.sessionId !== next.sessionId) return next;
+  return {
+    sessionId: next.sessionId,
+    spans: [...prev.spans, ...next.spans],
+    violations: [...prev.violations, ...next.violations],
+    syncFailed: prev.syncFailed || next.syncFailed,
+    evidenceDropped: prev.evidenceDropped + next.evidenceDropped,
+  };
+}
+
 export interface PhoneDownSummary {
   sessionId: number;
   spans: ResolvedSpan[];
@@ -320,6 +339,20 @@ export class PhoneDownSession {
    * expire FIRST so the closed span is marked violated correctly.
    */
   feedEdge(e: OrientationEdgeEvent): void {
+    // Corroborate live face-down claims: a proximity 'near' while a fresh
+    // continuous sample says the phone is UPRIGHT is a covered sensor in
+    // hand, not a face-down desk — drop it before it opens a fake span.
+    // Buffered replays (ts older than a dwell) describe the past; the
+    // current reading can't veto them.
+    if (e.edge === 'face_down' && this.now() - e.ts < STREAM_DEAD_MS * 2) {
+      const measuredUpright = this.runningProviders.some(
+        (p) =>
+          p.stillFlat === false &&
+          p.lastSampleAt != null &&
+          this.now() - p.lastSampleAt <= STREAM_DEAD_MS,
+      );
+      if (measuredUpright) return;
+    }
     const deadline = this.machine.graceDeadlineMs;
     if (this.machine.state === 'grace' && deadline !== null && e.ts >= deadline) {
       this.machine.dispatch({ type: 'GRACE_EXPIRED', ts: deadline });
@@ -476,7 +509,14 @@ export class PhoneDownSession {
           provider.drainTransitions(),
           new Promise<null>((resolve) => setTimeout(() => resolve(null), 15_000)),
         ]);
-        if (drain === null) continue;
+        if (drain === null) {
+          // A timed-out drain may have consumed rows natively before the
+          // bound — whatever they described (a pickup!) is lost, and the
+          // next drain's heartbeat can make the gap look covered. Prior
+          // proofs can't stand in for data that never arrived.
+          this.coverageProofTs = null;
+          continue;
+        }
         for (const t of drain.transitions) {
           this.feedEdge({ edge: t.near ? 'face_down' : 'picked_up', ts: t.ts });
         }
