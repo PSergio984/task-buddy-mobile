@@ -1,0 +1,68 @@
+import CoreMotion
+import ExpoModulesCore
+
+public class ExpoMotionRecorderModule: Module {
+
+  private let recorder = CMSensorRecorder()
+
+  public func definition() -> ModuleDefinition {
+    Name("ExpoMotionRecorder")
+
+    AsyncFunction("isAvailable") { () -> Bool in
+      // iPhone 7+ only; false on Simulator and unsupported hardware.
+      CMSensorRecorder.isAccelerometerRecordingAvailable()
+    }
+
+    AsyncFunction("startRecording") { (durationSeconds: Double) in
+      // Requires NSMotionUsageDescription (expo-sensors motionPermission).
+      self.recorder.recordAccelerometer(forDuration: durationSeconds)
+    }
+
+    AsyncFunction("stopRecording") { () -> Void in
+      // CMSensorRecorder has no cancel API, but a new record request
+      // replaces the outstanding one — requesting ~0 duration expires the
+      // 12h window almost immediately instead of sampling past teardown.
+      self.recorder.recordAccelerometer(forDuration: 0.1)
+    }
+
+    AsyncFunction("queryAccelerometer") { (fromTs: Double, toTs: Double) -> [String: Double]? in
+      let from = Date(timeIntervalSince1970: fromTs / 1000)
+      let to = Date(timeIntervalSince1970: toTs / 1000)
+      guard let list = self.recorder.accelerometerData(from: from, to: to) else {
+        return nil
+      }
+      var count = 0
+      var minZ = Double.greatestFiniteMagnitude
+      var maxZ = -Double.greatestFiniteMagnitude
+      var sum = 0.0
+      var firstTs = Double.greatestFiniteMagnitude
+      var lastTs = -Double.greatestFiniteMagnitude
+      // CMLogItem.timestamp is seconds since boot — anchor to epoch so JS
+      // can bound which part of the gap the samples actually cover.
+      let epochNow = Date().timeIntervalSince1970
+      let uptimeNow = ProcessInfo.processInfo.systemUptime
+      // CMSensorDataList is an NSEnumerator, not a Sequence — nextObject()
+      // is the only portable traversal (for-in does not compile).
+      while let datum = list.nextObject() {
+        guard let sample = datum as? CMRecordedAccelerometerData else { continue }
+        let z = sample.acceleration.z
+        minZ = min(minZ, z)
+        maxZ = max(maxZ, z)
+        sum += z
+        count += 1
+        let epochTs = (epochNow - uptimeNow + sample.timestamp) * 1000
+        firstTs = min(firstTs, epochTs)
+        lastTs = max(lastTs, epochTs)
+      }
+      if count == 0 { return nil }
+      return [
+        "count": Double(count),
+        "minZ": minZ,
+        "maxZ": maxZ,
+        "meanZ": sum / Double(count),
+        "firstTs": firstTs,
+        "lastTs": lastTs,
+      ]
+    }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "platforms": ["android", "apple"],
+  "apple": {
+    "modules": ["ExpoMotionRecorderModule"]
+  },
+  "android": {
+    "modules": ["expo.modules.motionrecorder.ExpoMotionRecorderModule"]
+  }
+}

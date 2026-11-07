@@ -7,6 +7,7 @@
     "icon": "./assets/images/icon.png",
     "scheme": "taskbuddymobile",
     "userInterfaceStyle": "dark",
+    "platforms": ["ios", "android"],
     "ios": {
       "icon": "./assets/expo.icon"
     },
@@ -29,7 +30,13 @@
           "imageWidth": 76
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-sensors",
+        {
+          "motionPermission": "Allow $(PRODUCT_NAME) to verify phone-down focus sessions while the app is in the background."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
