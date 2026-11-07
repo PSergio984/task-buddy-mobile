@@ -16,9 +16,11 @@ import type { PhoneDownHistoryRow } from '@/components/focus/history-list';
  */
 const HISTORY_PAGE_SIZE = 500;
 
-export function usePhoneDownHistory(enabled: boolean) {
+export function usePhoneDownHistory(enabled: boolean, accountKey: string | null) {
   const { data } = useQuery({
-    queryKey: ['game-events'],
+    // Account-scoped: a shared key would show the previous login's ledger
+    // while the new account's fetch was still in flight.
+    queryKey: ['game-events', accountKey],
     queryFn: async (): Promise<GameEventRead[]> =>
       (await gameApi.getEvents(null, HISTORY_PAGE_SIZE, true)).events,
     enabled,

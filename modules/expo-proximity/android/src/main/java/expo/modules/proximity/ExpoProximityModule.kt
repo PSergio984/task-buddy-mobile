@@ -28,8 +28,13 @@ class ExpoProximityModule : Module(), SensorEventListener {
         appContext.reactContext?.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
           ?: return@OnStartObserving
       val sensor = sm.getDefaultSensor(Sensor.TYPE_PROXIMITY) ?: return@OnStartObserving
+      // registerListener can reject — a false return must not leave the
+      // module looking observed while zero events can ever arrive.
+      if (!sm.registerListener(this@ExpoProximityModule, sensor, SensorManager.SENSOR_DELAY_NORMAL)) {
+        sensorManager = null
+        return@OnStartObserving
+      }
       sensorManager = sm
-      sm.registerListener(this@ExpoProximityModule, sensor, SensorManager.SENSOR_DELAY_NORMAL)
     }
 
     OnStopObserving("onProximityChange") {

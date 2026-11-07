@@ -15,12 +15,17 @@ import type { GapVerdict } from '@/game/phone-down';
 import type { RetroProvider } from './types';
 import { tryNativeModule } from './native';
 
-/** Gravity-z summary the native module returns for a query window. */
+/** Gravity-z summary the native module returns for a query window.
+ *  firstTs/lastTs bound WHICH samples answered — a sparse query result
+ *  can't stand in for coverage of the whole gap. */
 export interface AccelerometerWindowStats {
   count: number;
   minZ: number;
   maxZ: number;
   meanZ: number;
+  /** Epoch ms of the first/last returned sample — coverage bounds. */
+  firstTs: number;
+  lastTs: number;
 }
 
 declare class ExpoMotionRecorderModule extends NativeModule<Record<never, never>> {
@@ -38,16 +43,35 @@ export interface RetroThresholds {
   /** iOS face-down window on gravity z (proper acceleration, +1g down). */
   flatMin: number;
   flatMax: number;
+  /** Each gap edge may be uncovered by at most this long before the
+   *  verdict stops being proof of the whole interval (recorder start/stop
+   *  latency, CMSensorRecorder delivery lag). */
+  edgeSlopMs: number;
 }
 
-const DEFAULT_THRESHOLDS: RetroThresholds = { minSamples: 3, flatMin: 0.8, flatMax: 1.45 };
+const DEFAULT_THRESHOLDS: RetroThresholds = {
+  minSamples: 3,
+  flatMin: 0.8,
+  flatMax: 1.45,
+  edgeSlopMs: 60_000,
+};
 
-/** Classify recorded gravity-z stats — exported for tests. */
+/** Classify recorded gravity-z stats — exported for tests. The samples
+ *  must bracket the gap: a recorder hole at either end fabricates
+ *  'stayed_flat' for time nobody measured. */
 export function classifyGapStats(
   stats: AccelerometerWindowStats | null,
+  fromTs: number,
+  toTs: number,
   thresholds: RetroThresholds = DEFAULT_THRESHOLDS,
 ): GapVerdict {
   if (!stats || stats.count < thresholds.minSamples) return 'unknown';
+  if (
+    stats.firstTs > fromTs + thresholds.edgeSlopMs ||
+    stats.lastTs < toTs - thresholds.edgeSlopMs
+  ) {
+    return 'unknown';
+  }
   // Face-down throughout: z pinned to the +1g window the whole interval.
   if (stats.minZ > thresholds.flatMin && stats.maxZ < thresholds.flatMax) return 'stayed_flat';
   return 'moved';
@@ -94,7 +118,7 @@ export class MotionRecorderProvider implements RetroProvider {
   async verifyGap(fromTs: number, toTs: number): Promise<GapVerdict> {
     try {
       const stats = (await this.module()?.queryAccelerometer(fromTs, toTs)) ?? null;
-      return classifyGapStats(stats, this.thresholds);
+      return classifyGapStats(stats, fromTs, toTs, this.thresholds);
     } catch {
       return 'unknown';
     }

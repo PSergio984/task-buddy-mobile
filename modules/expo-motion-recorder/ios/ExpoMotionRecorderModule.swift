@@ -33,6 +33,12 @@ public class ExpoMotionRecorderModule: Module {
       var minZ = Double.greatestFiniteMagnitude
       var maxZ = -Double.greatestFiniteMagnitude
       var sum = 0.0
+      var firstTs = Double.greatestFiniteMagnitude
+      var lastTs = -Double.greatestFiniteMagnitude
+      // CMLogItem.timestamp is seconds since boot — anchor to epoch so JS
+      // can bound which part of the gap the samples actually cover.
+      let epochNow = Date().timeIntervalSince1970
+      let uptimeNow = ProcessInfo.processInfo.systemUptime
       for datum in list {
         guard let sample = datum as? CMRecordedAccelerometerData else { continue }
         let z = sample.acceleration.z
@@ -40,6 +46,9 @@ public class ExpoMotionRecorderModule: Module {
         maxZ = max(maxZ, z)
         sum += z
         count += 1
+        let epochTs = (epochNow - uptimeNow + sample.timestamp) * 1000
+        firstTs = min(firstTs, epochTs)
+        lastTs = max(lastTs, epochTs)
       }
       if count == 0 { return nil }
       return [
@@ -47,6 +56,8 @@ public class ExpoMotionRecorderModule: Module {
         "minZ": minZ,
         "maxZ": maxZ,
         "meanZ": sum / Double(count),
+        "firstTs": firstTs,
+        "lastTs": lastTs,
       ]
     }
   }

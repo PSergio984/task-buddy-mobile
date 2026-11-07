@@ -98,9 +98,6 @@ class FocusSessionService : Service(), SensorEventListener {
       if (Build.VERSION.SDK_INT >= 34) ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
       else ServiceInfo.FOREGROUND_SERVICE_TYPE_MANIFEST
     ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, type)
-    // Only claim liveness once the service is provably foreground —
-    // startForeground throwing must not leave `running` asserting coverage.
-    running = true
 
     val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
     wakeLock =
@@ -112,10 +109,22 @@ class FocusSessionService : Service(), SensorEventListener {
     sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
     // Wake-up variant only — the non-wake-up sensor stops delivering in
     // Doze, which would drop transitions while coverage is being claimed.
-    // isAvailable already gated on it; a null here means the sensor
-    // vanished mid-arm, so no silent fallback pretends it still listens.
+    // A missing sensor or rejected registration fails CLOSED: a heartbeat-
+    // only service would prove liveness while recording no transitions,
+    // claiming covered windows nothing observed. stopSelf kills it so
+    // drains return honest no-proof instead of fabricated coverage.
     val sensor = sensorManager?.getDefaultSensor(Sensor.TYPE_PROXIMITY, true)
-    sensor?.let { sensorManager?.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL) }
+    if (
+      sensor == null ||
+      sensorManager?.registerListener(this, sensor, SensorManager.SENSOR_DELAY_NORMAL) != true
+    ) {
+      stopSelf()
+      return
+    }
+    // Only claim liveness once the service is provably foreground AND
+    // its sensor stream is live — both must hold before `running` can
+    // stand in as the coverage flag.
+    synchronized(transitions) { running = true }
 
     // First beat lands now so short gaps still carry a proof row.
     handler.post(heartbeat)
@@ -140,7 +149,11 @@ class FocusSessionService : Service(), SensorEventListener {
   override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
 
   override fun onDestroy() {
-    running = false
+    // Same monitor the drain's check+append takes — a drain mid-destroy
+    // either stamps the heartbeat before this flip (legit last proof) or
+    // sees running=false after it (honest no-proof). Never a post-mortem
+    // stamp claiming liveness for a dead service.
+    synchronized(transitions) { running = false }
     handler.removeCallbacks(heartbeat)
     sensorManager?.unregisterListener(this)
     sensorManager = null

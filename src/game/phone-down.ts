@@ -88,6 +88,15 @@ export class FaceDownClassifier {
     return this.emitted;
   }
 
+  /** Fresh arm — prior `emitted`/dwell state belongs to the last session;
+   *  keeping it would suppress the real first edge of the next one. */
+  reset(): void {
+    this.emitted = false;
+    this.pendingDir = null;
+    this.pendingSince = null;
+    this.faceDownSign = this.platformSign;
+  }
+
   /**
    * Validate the face-down sign against a baseline sample set taken at arm
    * time (the user just tapped the toggle — the phone is in hand,

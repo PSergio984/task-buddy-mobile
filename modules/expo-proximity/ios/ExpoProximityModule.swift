@@ -34,6 +34,11 @@ public class ExpoProximityModule: Module {
           ) { [weak self] _ in
             self?.proximityChanged()
           }
+          // The notification only fires on CHANGE — a phone already
+          // covered at registration would report uncovered until the
+          // first lift. Emit the current state so the machine starts
+          // from the truth.
+          self.proximityChanged()
         }
       }
     }

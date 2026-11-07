@@ -61,21 +61,25 @@ class ExpoFocusServiceModule : Module() {
       ctx.stopService(Intent(ctx, FocusSessionService::class.java))
     }
 
+    // Lifecycle acknowledgment — start/stop intents resolve asynchronously,
+    // so JS must poll this before claiming coverage state changed.
+    AsyncFunction("isRunning") { FocusSessionService.running }
+
     AsyncFunction("drainTransitions") {
-      // Liveness stamp: when the service is running, append a fresh
-      // heartbeat so the newest drained row proves it survived to now.
-      if (FocusSessionService.running) {
-        FocusSessionService.addTransition(
-          near = false,
-          kind = FocusSessionService.KIND_HEARTBEAT,
-        )
-      }
       // Producers only append, so the snapshot prefix is exactly what we
       // consume — remove by position inside the same monitor addTransition
       // takes (a blind removeAll would also drop an equal-valued row
-      // appended after the snapshot).
+      // appended after the snapshot). The liveness stamp lives inside the
+      // SAME monitor that onDestroy's running=false takes: check+append is
+      // atomic, so a heartbeat can never stamp a dead service alive.
       val drained =
         synchronized(FocusSessionService.transitions) {
+          if (FocusSessionService.running) {
+            FocusSessionService.addTransition(
+              near = false,
+              kind = FocusSessionService.KIND_HEARTBEAT,
+            )
+          }
           val d = FocusSessionService.transitions.toList()
           repeat(d.size) { FocusSessionService.transitions.removeAt(0) }
           d

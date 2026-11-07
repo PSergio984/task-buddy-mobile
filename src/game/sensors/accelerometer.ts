@@ -56,6 +56,10 @@ export class AccelerometerOrientationProvider implements OrientationProvider {
     this.calibrating = true;
     this.startedAt = Date.now();
     this.lastSample = null;
+    // The classifier instance survives across arms — a phone still down
+    // from the previous arm keeps `emitted`, emits no face_down edge,
+    // and the new session would wedge in 'armed' with zero evidence.
+    this.classifier.reset();
     Accelerometer.setUpdateInterval(SAMPLE_INTERVAL_MS);
     this.subscription = Accelerometer.addListener((m: AccelerometerMeasurement) => {
       const now = Date.now();

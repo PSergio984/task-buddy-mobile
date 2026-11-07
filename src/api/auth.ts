@@ -5,6 +5,7 @@
 import * as SecureStore from 'expo-secure-store';
 import { useSyncExternalStore } from 'react';
 
+import { purgeEventQueueStorage } from '@/game/event-queue';
 import { apiFetch, setUnauthorizedHandler, TOKEN_STORAGE_KEY } from './client';
 import type { RegisterResponse, TokenResponse } from './types';
 
@@ -35,6 +36,9 @@ export async function setToken(token: string): Promise<void> {
 export async function clearToken(): Promise<void> {
   cachedToken = null;
   await SecureStore.deleteItemAsync(TOKEN_STORAGE_KEY);
+  // The persisted event queue belongs to this account — a fresh login
+  // must never flush the previous account's evidence under its token.
+  await purgeEventQueueStorage().catch(() => {});
   emit();
 }
 

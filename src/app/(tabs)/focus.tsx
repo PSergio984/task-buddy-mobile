@@ -110,7 +110,7 @@ export default function FocusScreen() {
       }),
   );
 
-  const history = usePhoneDownHistory(!!token);
+  const history = usePhoneDownHistory(!!token, token);
 
   // Incomplete tasks for the optional link picker (same cache as the Tasks tab).
   const { data: tasks } = useQuery({
@@ -128,6 +128,31 @@ export default function FocusScreen() {
   const view = useMemo(() => (session ? deriveSessionView(session, now) : null), [session, now]);
   /** Phase-level pause — the session row stays 'active' throughout. */
   const paused = view?.status === 'paused';
+
+  // A timed phase at 0:00 doesn't self-advance — phase transitions are
+  // server-lazy, so poll getActive once the local clock reaches expiry
+  // (throttled; a dead server can't spin the loop).
+  const expiredPollRef = useRef(0);
+  const livePhase = session?.phases.find((p) => p.status === 'running' || p.status === 'paused');
+  useEffect(() => {
+    if (
+      !session ||
+      !view ||
+      view.status !== 'running' ||
+      view.clockSeconds !== 0 ||
+      livePhase?.kind === 'stopwatch'
+    ) {
+      return;
+    }
+    if (Date.now() - expiredPollRef.current < 5_000) return;
+    expiredPollRef.current = Date.now();
+    sessionsApi
+      .getActive()
+      .then((res) => {
+        if (res?.session) setSession(res.session);
+      })
+      .catch(() => {});
+  }, [session, view, livePhase]);
 
   // Tick for the running clock — also refreshes the pd liveness mirrors
   // (a dead stream fires no transition, so only the tick can catch it).
@@ -297,30 +322,39 @@ export default function FocusScreen() {
   }, [session?.status, paused]);
 
   const togglePhoneDown = async (next: boolean) => {
+    // Re-entrant guards: a double-tap while arm/disarm is still draining
+    // must not fire a second teardown — and the pre-patch early return
+    // keeps the switch honest (it snaps back instead of lying 'on').
+    if (busy !== null) return;
     patch({ phoneDown: next });
     if (!session || session.status !== 'active' || restored || session.mode !== 'timer') return;
-    if (next) {
-      // Paused: keep intent only — the arm effect re-arms on resume.
-      // No blob: started without phone-down; it can't be enabled now.
-      if (paused || session.phone_down == null) return;
-      if ((await pd.arm(session.id).catch(() => false)) && mountedRef.current) {
-        activateKeepAwake();
+    setBusy('phonedown');
+    try {
+      if (next) {
+        // Paused: keep intent only — the arm effect re-arms on resume.
+        // No blob: started without phone-down; it can't be enabled now.
+        if (paused || session.phone_down == null) return;
+        if ((await pd.arm(session.id).catch(() => false)) && mountedRef.current) {
+          activateKeepAwake();
+        }
+      } else {
+        releaseKeepAwake();
+        const sum = await pd.disarm().catch(() => null);
+        setSummary((prev) => mergeSummary(prev, sum));
+        syncDeadLetters();
+        const reported = sum
+          ? sum.spans.filter((s) => s.end_ts - s.start_ts >= MIN_SPAN_MS).length
+          : 0;
+        if (reported > 0) {
+          setNotice(
+            sum?.syncFailed
+              ? `Phone-down off — ${reported} span(s) queued — will sync when back online.`
+              : `Phone-down off — ${reported} span(s) reported.`,
+          );
+        }
       }
-    } else {
-      releaseKeepAwake();
-      const sum = await pd.disarm().catch(() => null);
-      setSummary((prev) => mergeSummary(prev, sum));
-      syncDeadLetters();
-      const reported = sum
-        ? sum.spans.filter((s) => s.end_ts - s.start_ts >= MIN_SPAN_MS).length
-        : 0;
-      if (reported > 0) {
-        setNotice(
-          sum?.syncFailed
-            ? `Phone-down off — ${reported} span(s) queued — will sync when back online.`
-            : `Phone-down off — ${reported} span(s) reported.`,
-        );
-      }
+    } finally {
+      setBusy(null);
     }
   };
 
@@ -614,7 +648,7 @@ export default function FocusScreen() {
         <PhoneDownOverlay
           pdState={pdState}
           graceLeftMs={graceLeft}
-          busy={busy === 'stop'}
+          busy={busy !== null}
           onDisarm={() => void togglePhoneDown(false)}
           onStop={() => void stop()}
         />

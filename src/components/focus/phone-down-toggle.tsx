@@ -31,6 +31,7 @@ export function PhoneDownToggle({
       </View>
       <Switch
         accessibilityLabel="Phone-down"
+        accessibilityHint={hint ?? undefined}
         value={value}
         disabled={disabled}
         onValueChange={onChange}

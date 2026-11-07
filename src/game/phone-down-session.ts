@@ -117,6 +117,9 @@ export class PhoneDownSession {
   /** In-flight evidence writes — flush must see them inside events before
    *  posting, so emitEvidence awaits them all first. */
   private pendingEnqueues: Promise<unknown>[] = [];
+  /** Bumped on every arm/disarm — a stale arm's in-flight continuation
+   *  must not push providers into the next session's runningProviders. */
+  private armGen = 0;
   private graceTimer: ReturnType<typeof setTimeout> | null = null;
   private drainTimer: ReturnType<typeof setInterval> | null = null;
   private appStateSub: { remove: () => void } | null = null;
@@ -191,6 +194,7 @@ export class PhoneDownSession {
    */
   async arm(sessionId: number): Promise<boolean> {
     if (this.machine.state !== 'idle') return false;
+    const gen = ++this.armGen;
     this.sessionId = sessionId;
     this.spans = [];
     this.violations = [];
@@ -218,10 +222,24 @@ export class PhoneDownSession {
     const available = await Promise.all(
       this.orientationProviders.map(async (p) => ((await p.isAvailable()) ? p : null)),
     );
+    // Providers this arm actually started — a stale continuation must
+    // stop ONLY these; shared fields may already belong to a newer arm.
+    const startedHere: OrientationProvider[] = [];
+    const retroHere: RetroProvider[] = [];
+    const bailIfStale = async (): Promise<boolean> => {
+      if (gen === this.armGen) return false;
+      await Promise.all([
+        ...startedHere.map((p) => p.stop().catch(() => {})),
+        ...retroHere.map((r) => r.stopRecording().catch(() => {})),
+      ]);
+      return true;
+    };
     for (const provider of available) {
       if (!provider) continue;
       try {
         await provider.start((e) => this.feedEdge(e));
+        startedHere.push(provider);
+        if (await bailIfStale()) return false;
         this.runningProviders.push(provider);
         // Live coverage starts at the FIRST provider up — an event-driven
         // edge (proximity 'near' on registration) or a slow later start
@@ -239,6 +257,16 @@ export class PhoneDownSession {
     if (this.anyCoversSuspension() && this.coverageTrustSeed === null) {
       this.coverageTrustSeed = this.now();
     }
+    // A covering FGS on Android buffers the same orientation edges the
+    // live proximity listener emits — running both double-feeds the
+    // machine (down→up→down inside one drain window would replay as
+    // fabricated spans). The FGS is the honest Android source.
+    if (this.anyCoversSuspension()) {
+      const dup = this.runningProviders.filter((p) => p.name === 'proximity');
+      this.runningProviders = this.runningProviders.filter((p) => p.name !== 'proximity');
+      await Promise.all(dup.map((p) => p.stop().catch(() => {})));
+    }
+    if (await bailIfStale()) return false;
     // A stop() landing mid-arm leaves the machine idle while sensors keep
     // streaming — tear down what we started and bail.
     if (this.machine.state === 'idle') {
@@ -259,6 +287,8 @@ export class PhoneDownSession {
       try {
         if (await retro.isAvailable()) {
           await retro.startRecording();
+          retroHere.push(retro);
+          if (await bailIfStale()) return false;
           this.runningRetro.push(retro);
         }
       } catch {
@@ -403,12 +433,14 @@ export class PhoneDownSession {
   }
 
   /**
-   * True when the last drain proved a covering provider alive within the
-   * freshness bound — the drain-time stamp doubles as proof the service
-   * ran continuously through the gap (START_NOT_STICKY ⇒ no restarts).
+   * True only when a drain produced a proof stamped at/after the gap's
+   * end — on Android that's the heartbeat the drain itself appends while
+   * the FGS is alive (START_NOT_STICKY ⇒ alive-at-drain ⇒ it covered the
+   * whole gap). A proof from before the gap closed (last buffered row of
+   * a service that died mid-gap) can never satisfy this.
    */
-  private coverageProven(now: number): boolean {
-    return this.coverageProofTs !== null && now - this.coverageProofTs < COVERAGE_PROOF_FRESH_MS;
+  private coverageProven(gapEnd: number): boolean {
+    return this.coverageProofTs !== null && this.coverageProofTs >= gapEnd;
   }
 
   /** Serialized so overlapping callers (2s poll, resume, stop/disarm) can't
@@ -561,6 +593,7 @@ export class PhoneDownSession {
    */
   async stop(): Promise<PhoneDownSummary> {
     const now = this.now();
+    this.armGen++;
     await this.drainBuffers().catch(() => {});
     this.settleGraceIfDue(now);
     if (this.machine.state !== 'idle') {
@@ -585,6 +618,7 @@ export class PhoneDownSession {
    *  spans earned so far still belong to the session. */
   async disarm(): Promise<PhoneDownSummary> {
     const now = this.now();
+    this.armGen++;
     await this.drainBuffers().catch(() => {});
     // A grace deadline that passed while suspended must mark the pending
     // span violated — it must not emit clean just because we disarm now.

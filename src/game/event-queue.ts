@@ -50,6 +50,18 @@ export interface EventQueueOptions {
 }
 
 const DEFAULT_KEY = 'task-buddy.game-event-queue';
+
+/** Drop the persisted queue — called on logout so the NEXT login on this
+ *  device can't flush the previous account's unposted evidence under its
+ *  own identity (the server attributes ledger rows to the bearer token). */
+export async function purgeEventQueueStorage(): Promise<void> {
+  // Same lazy require as createEventQueue — the native module throws at
+  // import time under jest.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const AsyncStorage = require('@react-native-async-storage/async-storage')
+    .default as KeyValueStorage;
+  await AsyncStorage.removeItem(DEFAULT_KEY);
+}
 /** Server caps GameEventBatch.events at 500 — chunk at the same bound. */
 const BATCH_SIZE = 500;
 /** Flush cycles a deterministically-rejected batch survives before the
