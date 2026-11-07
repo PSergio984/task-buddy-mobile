@@ -129,9 +129,17 @@ export class EventQueue {
       if (raw) {
         const parsed: unknown = JSON.parse(raw);
         if (Array.isArray(parsed)) {
+          // Validate every wire field — a parseable row missing client_ts
+          // or payload posts a guaranteed 422 and dead-letters itself and
+          // (batched behind it) every well-formed event after it.
           this.events = parsed.filter(
             (e): e is QueuedEvent =>
-              !!e && typeof e.client_event_id === 'string' && typeof e.type === 'string',
+              !!e &&
+              typeof e.client_event_id === 'string' &&
+              typeof e.type === 'string' &&
+              typeof e.client_ts === 'string' &&
+              !!e.payload &&
+              typeof e.payload === 'object',
           );
         }
       }
