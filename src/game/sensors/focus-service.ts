@@ -74,14 +74,21 @@ export class FocusServiceProvider implements OrientationProvider {
 
   /** Poll the native flag until it reflects `target` or the bound hits —
    *  start/stop are fire-and-forget intents whose effects land in
-   *  onCreate/onDestroy, so `running` can only follow confirmation. */
+   *  onCreate/onDestroy, so `running` can only follow confirmation. Each
+   *  probe is itself bounded: a hung native IPC would otherwise make the
+   *  deadline (and the serialized ops chain behind it) unreachable. */
   private async awaitLifecycle(mod: ExpoFocusServiceModule, target: boolean): Promise<boolean> {
+    const probe = () =>
+      Promise.race([
+        mod.isRunning(),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), LIFECYCLE_POLL_MS * 2)),
+      ]);
     const deadline = Date.now() + LIFECYCLE_ACK_MS;
     while (Date.now() < deadline) {
-      if ((await mod.isRunning()) === target) return true;
+      if ((await probe()) === target) return true;
       await new Promise((resolve) => setTimeout(resolve, LIFECYCLE_POLL_MS));
     }
-    return (await mod.isRunning()) === target;
+    return (await probe()) === target;
   }
 
   async start(_onEdge: (e: OrientationEdgeEvent) => void): Promise<void> {
