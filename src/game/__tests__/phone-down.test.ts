@@ -110,7 +110,7 @@ describe('FaceDownClassifier', () => {
 
   it('calibrate: empty baseline keeps the platform prior', () => {
     const c = new FaceDownClassifier(android);
-    expect(c.calibrate([]).quality).toBe('assumed');
+    expect(c.calibrate([])).toEqual({ faceDownSign: -1, quality: 'assumed' });
   });
 
   it('calibrate: baseline already face-down keeps the platform prior', () => {
@@ -128,8 +128,18 @@ describe('FaceDownClassifier', () => {
     expect(res).toEqual({ faceDownSign: -1, quality: 'already_down' });
   });
 
-  it('default platform sign matches the research (Android −1, iOS +1)', () => {
-    expect([-1, 1]).toContain(DEFAULT_PLATFORM_FACE_DOWN_SIGN);
+  it.each([
+    ['android', -1],
+    ['ios', 1],
+  ] as const)('default platform sign on %s resolves to %d', (os, expected) => {
+    // DEFAULT_PLATFORM_FACE_DOWN_SIGN is bound at module load — mock
+    // Platform.OS under an isolated registry to prove each side.
+    jest.isolateModules(() => {
+      jest.doMock('react-native', () => ({ Platform: { OS: os } }));
+      const mod = require('@/game/phone-down') as typeof import('@/game/phone-down');
+      expect(mod.DEFAULT_PLATFORM_FACE_DOWN_SIGN).toBe(expected);
+    });
+    jest.dontMock('react-native');
   });
 });
 
