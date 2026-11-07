@@ -501,7 +501,7 @@ export default function FocusScreen() {
                         ? 'Face-down time is being verified — lifting starts grace.'
                         : 'Verify focus by keeping the phone face-down.'
                     }
-                    value={pdActive}
+                    value={phoneDown}
                     disabled={session.phone_down == null}
                     hint={
                       session.phone_down == null

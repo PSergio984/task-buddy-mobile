@@ -346,3 +346,78 @@ describe('PhoneDownSession — arm/disarm races', () => {
     });
   });
 });
+
+describe('PhoneDownSession — durable-write failure', () => {
+  it('stop() reports evidenceDropped for rejected enqueues without rejecting', async () => {
+    const clock = { now: 0 };
+    const queue = makeQueue();
+    // Every write fails — a broken AsyncStorage must surface through the
+    // summary, not crash the teardown or lose the count silently.
+    queue.enqueue.mockRejectedValue(new Error('storage full'));
+    const provider = fakeProvider();
+    const session = new PhoneDownSession({
+      queue: queue.asQueue,
+      orientation: [provider],
+      retro: [],
+      now: () => clock.now,
+      drainPollMs: 60_000,
+    });
+    await session.arm(7);
+    session.feedEdge({ edge: 'face_down', ts: 1_000 });
+    session.feedEdge({ edge: 'picked_up', ts: 5_000 });
+    clock.now = 16_000; // past the 10s grace → violated + one span
+    const sum = await session.stop();
+    expect(sum.evidenceDropped).toBe(2); // span + grace_expired violation
+    expect(sum.spans).toHaveLength(1);
+  });
+});
+
+describe('PhoneDownSession — dead continuous stream', () => {
+  it('a silenced accelerometer ends live coverage at its last sample → unverified', async () => {
+    const clock = { now: 0 };
+    const queue = makeQueue();
+    // Continuous emitter whose sample clock the test controls.
+    const live = { lastSampleAt: 0 };
+    const provider = fakeProvider({
+      get lastSampleAt() {
+        return live.lastSampleAt;
+      },
+    });
+    const session = new PhoneDownSession({
+      queue: queue.asQueue,
+      orientation: [provider],
+      retro: [],
+      now: () => clock.now,
+      drainPollMs: 60_000,
+    });
+    await session.arm(7);
+    session.feedEdge({ edge: 'face_down', ts: 1_000 });
+    clock.now = 1_000;
+    live.lastSampleAt = 1_000;
+    // Stream dies at 1s; the phone stays down until 30s — only the
+    // ~1s provable window can claim verified.
+    clock.now = 30_000;
+    const sum = await session.stop();
+    expect(sum.spans).toHaveLength(1);
+    expect(sum.spans[0].tier).toBe('unverified');
+  });
+});
+
+describe('PhoneDownSession — grace deadline honesty', () => {
+  it('a direct FACE_DOWN dispatched past the deadline expires, not recovers', async () => {
+    const { session, clock, queue } = makeSession();
+    await session.arm(7);
+    session.machine.dispatch({ type: 'FACE_DOWN', ts: 1_000 });
+    session.machine.dispatch({ type: 'PICKED_UP', ts: 5_000 }); // grace → deadline 15_000
+    // Bypasses feedEdge's pre-emption: the reducer itself must expire.
+    session.machine.dispatch({ type: 'FACE_DOWN', ts: 20_000 });
+    const calls = queue.enqueue.mock.calls.filter((c) => c[0] === 'phone_down_violation');
+    expect(calls).toHaveLength(1);
+    expect(calls[0][1]).toMatchObject({
+      at_ts: new Date(15_000).toISOString(),
+      kind: 'grace_expired',
+    });
+    clock.now = 25_000;
+    await session.stop();
+  });
+});

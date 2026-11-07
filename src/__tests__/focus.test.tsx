@@ -291,4 +291,55 @@ describe('FocusScreen', () => {
     await waitFor(() => expect(pd.arm).toHaveBeenCalledTimes(2));
     expect(pd.state).toBe('running');
   });
+
+  it('start posts phone_down: true when the toggle is on', async () => {
+    (sessionsApi.start as jest.Mock).mockResolvedValue({
+      session: pdSession,
+      profile: null,
+      server_time: 't',
+    });
+    await renderScreen();
+    await act(async () => {
+      fireEvent(screen.getByRole('switch', { name: /phone-down/i }), 'onValueChange', true);
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByText('Start focus'));
+    });
+    await waitFor(() => expect(sessionsApi.start).toHaveBeenCalledTimes(1));
+    const body = (sessionsApi.start as jest.Mock).mock.calls[0][0];
+    expect(body.phone_down).toBe(true);
+  });
+
+  it('stop drains phone-down evidence before calling the server verb', async () => {
+    (sessionsApi.start as jest.Mock).mockResolvedValue({
+      session: pdSession,
+      profile: null,
+      server_time: 't',
+    });
+    (sessionsApi.stop as jest.Mock).mockResolvedValue({
+      session: endedSession,
+      profile: null,
+      server_time: 't',
+    });
+    await renderScreen();
+    await act(async () => {
+      fireEvent(screen.getByRole('switch', { name: /phone-down/i }), 'onValueChange', true);
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByText('Start focus'));
+    });
+    const pd = mockPdInstances[mockPdInstances.length - 1];
+    await waitFor(() => expect(pd.arm).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      fireEvent.press(screen.getByText('Stop → abandon (−HP)'));
+    });
+    // Evidence flush must precede the verb: spans scored server-side
+    // need to exist in the ledger before focus_phase_completed lands.
+    await waitFor(() => expect(sessionsApi.stop).toHaveBeenCalledWith(7));
+    expect(mockStop).toHaveBeenCalled();
+    expect(mockStop.mock.invocationCallOrder[0]).toBeLessThan(
+      (sessionsApi.stop as jest.Mock).mock.invocationCallOrder[0],
+    );
+  });
 });

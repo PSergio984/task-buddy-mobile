@@ -72,7 +72,7 @@ class ExpoFocusServiceModule : Module() {
       // appended after the snapshot). The liveness stamp lives inside the
       // SAME monitor that onDestroy's running=false takes: check+append is
       // atomic, so a heartbeat can never stamp a dead service alive.
-      val drained =
+      val (drained, dropped) =
         synchronized(FocusSessionService.transitions) {
           if (FocusSessionService.running) {
             FocusSessionService.addTransition(
@@ -82,9 +82,16 @@ class ExpoFocusServiceModule : Module() {
           }
           val d = FocusSessionService.transitions.toList()
           repeat(d.size) { FocusSessionService.transitions.removeAt(0) }
-          d
+          val drops = FocusSessionService.droppedTransitions
+          FocusSessionService.droppedTransitions = 0L
+          d to drops
         }
-      drained.map { mapOf("near" to it.near, "ts" to it.ts.toDouble(), "kind" to it.kind) }
+      mapOf(
+        "transitions" to
+          drained.map { mapOf("near" to it.near, "ts" to it.ts.toDouble(), "kind" to it.kind) },
+        // Dropped rows = lost edges — JS downgrades the affected coverage.
+        "dropped" to dropped.toDouble(),
+      )
     }
   }
 }

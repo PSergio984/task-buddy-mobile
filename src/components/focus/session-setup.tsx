@@ -88,6 +88,7 @@ function NumberInput({
       <Text style={styles.numberLabel}>{label}</Text>
       <TextInput
         style={styles.numberInput}
+        accessibilityLabel={label}
         value={value}
         onChangeText={(t) => onChange(digits(t))}
         keyboardType="number-pad"

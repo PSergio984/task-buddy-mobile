@@ -47,6 +47,11 @@ class FocusSessionService : Service(), SensorEventListener {
      *  and the span degrades to unverified rather than lying about it. */
     val transitions = CopyOnWriteArrayList<Transition>()
 
+    /** Rows lost to the bounded buffer since the last drain — a dropped
+     *  edge means the replayed history is a SUFFIX, so JS must treat the
+     *  affected coverage as unprovable rather than replaying it as fact. */
+    var droppedTransitions = 0L
+
     /** True between onCreate and onDestroy — NOT_STICKY means an alive
      *  service ran continuously, so this flag is the liveness proof. */
     @Volatile
@@ -57,7 +62,10 @@ class FocusSessionService : Service(), SensorEventListener {
       // Bounded buffer — drop the oldest rows first. Shares drain's
       // monitor so a bounded-add can't splice inside a snapshot remove.
       synchronized(transitions) {
-        while (transitions.size >= MAX_BUFFERED_TRANSITIONS) transitions.removeAt(0)
+        while (transitions.size >= MAX_BUFFERED_TRANSITIONS) {
+          transitions.removeAt(0)
+          droppedTransitions++
+        }
         transitions.add(Transition(near, System.currentTimeMillis(), kind))
       }
     }
@@ -78,7 +86,10 @@ class FocusSessionService : Service(), SensorEventListener {
     super.onCreate()
     // Fresh service lifetime = fresh coverage window: rows buffered under a
     // previous instance would replay into this session otherwise.
-    synchronized(transitions) { transitions.clear() }
+    synchronized(transitions) {
+      transitions.clear()
+      droppedTransitions = 0L
+    }
     val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     // NotificationChannel is API 26+ — isAvailable() already gates the
     // module to O+, so this is belt-and-braces against a manual start.

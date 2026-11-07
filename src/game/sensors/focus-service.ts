@@ -28,8 +28,9 @@ declare class ExpoFocusServiceModule extends NativeModule<Record<never, never>> 
   stopService(): Promise<void>;
   /** Service-lifecycle truth — start/stop intents resolve asynchronously. */
   isRunning(): Promise<boolean>;
-  /** Destructive read of buffered transitions, oldest first. */
-  drainTransitions(): Promise<NativeTransition[]>;
+  /** Destructive read — buffered transitions oldest-first plus the count
+   *  of rows the bounded buffer dropped since the previous drain. */
+  drainTransitions(): Promise<{ transitions: NativeTransition[]; dropped: number }>;
 }
 
 /** Bounded poll — a start/stop intent that never reflects in `running`
@@ -130,12 +131,14 @@ export class FocusServiceProvider implements OrientationProvider {
   async drainTransitions(): Promise<DrainResult> {
     if (!this.running) return { transitions: [], lastProofTs: null };
     try {
-      const rows = (await this.module()?.drainTransitions()) ?? [];
+      const res = await this.module()?.drainTransitions();
+      const rows = res?.transitions ?? [];
       return {
         transitions: rows
           .filter((r) => r.kind !== 'heartbeat')
           .map((r) => ({ near: r.near, ts: r.ts })),
         lastProofTs: rows.length > 0 ? Math.max(...rows.map((r) => r.ts)) : null,
+        dropped: res?.dropped ?? 0,
       };
     } catch {
       return { transitions: [], lastProofTs: null };

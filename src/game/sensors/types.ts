@@ -32,6 +32,12 @@ export interface DrainResult {
    * interval it claimed to cover must not be trusted.
    */
   lastProofTs: number | null;
+  /**
+   * Rows the native buffer dropped since the previous drain — a nonzero
+   * count means the replayed history is a suffix with edges lost, so the
+   * coverage story it tells is incomplete and can't promote anything.
+   */
+  dropped?: number;
 }
 
 export interface OrientationProvider {

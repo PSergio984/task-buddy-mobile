@@ -11,11 +11,11 @@ facts, the server decides what they pay.
 
 Nothing is ever labeled beyond what the sensors could prove:
 
-| Tier         | Meaning                                                                                   |
-| ------------ | ----------------------------------------------------------------------------------------- |
-| `verified`   | Every instant of the span has live or retro sensor coverage.                              |
-| `unverified` | Part of the span is unproven (dead sensor, denied permission, gap with no retro verdict). |
-| `violated`   | A violation instant sits inside the span window, or a retro verdict says the phone moved. |
+| Tier         | Meaning                                                                                                                                                             |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `verified`   | Every instant of the span has live or retro sensor coverage.                                                                                                        |
+| `unverified` | Part of the span is unproven (dead sensor, denied permission, gap with no retro verdict).                                                                           |
+| `violated`   | A violation is associated with the span — an instant inside its window, its own `grace_expired` (stamped at the deadline it outlasted), or a retro `moved` verdict. |
 
 A span that can't be proven is **always** `unverified` — never quietly
 promoted. The in-session chip follows the same rule: it shows `verified`

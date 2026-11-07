@@ -219,8 +219,16 @@ export class PhoneDownSession {
       if (!this.anyCoversSuspension()) this.tracker.suspend(this.now());
     }
 
+    // Per-provider catch — one rejected probe must not sink the whole
+    // Promise.all and leave the machine armed with zero providers.
     const available = await Promise.all(
-      this.orientationProviders.map(async (p) => ((await p.isAvailable()) ? p : null)),
+      this.orientationProviders.map(async (p) => {
+        try {
+          return (await p.isAvailable()) ? p : null;
+        } catch {
+          return null;
+        }
+      }),
     );
     // Providers this arm actually started — a stale continuation must
     // stop ONLY these; shared fields may already belong to a newer arm.
@@ -472,7 +480,12 @@ export class PhoneDownSession {
         for (const t of drain.transitions) {
           this.feedEdge({ edge: t.near ? 'face_down' : 'picked_up', ts: t.ts });
         }
-        if (drain.lastProofTs !== null) {
+        if ((drain.dropped ?? 0) > 0) {
+          // The buffer overflowed — the replayed history is a suffix with
+          // edges lost. Its proofs can't stand: downgrade the affected
+          // coverage rather than claim a gap nobody fully recorded.
+          this.coverageProofTs = null;
+        } else if (drain.lastProofTs !== null) {
           this.coverageProofTs = Math.max(this.coverageProofTs ?? 0, drain.lastProofTs);
         }
       } catch {

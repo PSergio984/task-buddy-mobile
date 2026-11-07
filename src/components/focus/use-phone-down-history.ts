@@ -32,6 +32,9 @@ export function usePhoneDownHistory(enabled: boolean, accountKey: string | null)
     // streak/multiplier in their resolved phone_down block — the feed is
     // newest-first, so the first hit per session is the final verdict.
     const streakBySession = new Map<number, { streak: number; mult: number }>();
+    // Completion blocks for sessions whose span rows fell off the newest
+    // page — applied only when no phone_down_* events exist at all.
+    const pendingSeed = new Map<number, Row>();
     const rank: Record<string, number> = { verified: 0, unverified: 1, violated: 2 };
     const tierOf = (v: unknown) =>
       v === 'verified' || v === 'unverified' || v === 'violated' ? v : null;
@@ -39,7 +42,13 @@ export function usePhoneDownHistory(enabled: boolean, accountKey: string | null)
       if (e.type === 'focus_phase_completed') {
         const sessionId = Number(e.payload.session_id);
         const block = e.payload.phone_down as
-          { streak_count?: unknown; xp_multiplier?: unknown } | undefined;
+          | {
+              streak_count?: unknown;
+              xp_multiplier?: unknown;
+              spans?: { tier?: unknown }[];
+              violations?: unknown;
+            }
+          | undefined;
         if (
           Number.isFinite(sessionId) &&
           !streakBySession.has(sessionId) &&
@@ -49,6 +58,29 @@ export function usePhoneDownHistory(enabled: boolean, accountKey: string | null)
           streakBySession.set(sessionId, {
             streak: block.streak_count,
             mult: block.xp_multiplier,
+          });
+        }
+        // A completed phone-down session whose evidence aged out of the
+        // feed still has its adjudicated blob — don't drop it silently.
+        if (Number.isFinite(sessionId) && block && !pendingSeed.has(sessionId)) {
+          const spans = Array.isArray(block.spans) ? block.spans : [];
+          const violations = typeof block.violations === 'number' ? block.violations : 0;
+          let worst: Row['worst'] = 'verified';
+          if (violations > 0) {
+            worst = 'violated';
+          } else {
+            for (const s of spans) {
+              const t = tierOf(s?.tier) ?? 'unverified';
+              if (rank[t] > rank[worst]) worst = t;
+            }
+            if (spans.length === 0) worst = 'unverified';
+          }
+          pendingSeed.set(sessionId, {
+            sessionId,
+            worst,
+            spans: spans.length,
+            violations,
+            at: e.server_ts,
           });
         }
         continue;
@@ -76,6 +108,11 @@ export function usePhoneDownHistory(enabled: boolean, accountKey: string | null)
       }
       if (e.server_ts > row.at) row.at = e.server_ts;
       bySession.set(sessionId, row);
+    }
+    // Completion-blob seeds apply only where no span/violation rows exist
+    // — the feed is desc, so real rows always win over the summary seed.
+    for (const [id, row] of pendingSeed) {
+      if (!bySession.has(id)) bySession.set(id, row);
     }
     return [...bySession.entries()]
       .sort((a, b) => (a[1].at < b[1].at ? 1 : -1))

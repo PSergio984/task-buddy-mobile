@@ -308,6 +308,17 @@ export class PhoneDownMachine {
         return;
       case 'grace':
         if (type === 'FACE_DOWN') {
+          // A face-down at/past the deadline is expiry, not recovery —
+          // feedEdge pre-empts buffered replays, but any dispatch path
+          // that bypasses it must not mark the pickup 'corrected'.
+          if (this.graceStart !== null && ts >= this.graceStart + this.graceMs) {
+            this.settlePendingSpan(true); // pickup outlasted grace — violated
+            this.recordViolation(this.graceStart + this.graceMs, 'grace_expired');
+            this.graceStart = null;
+            this.openSpan(ts);
+            this.state = 'running';
+            return;
+          }
           this.settlePendingSpan(false); // corrected inside grace — clean
           this.graceStart = null;
           this.openSpan(ts);
