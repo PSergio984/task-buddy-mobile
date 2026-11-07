@@ -1,0 +1,9 @@
+{
+  "platforms": ["android", "apple"],
+  "apple": {
+    "modules": ["ExpoFocusServiceModule"]
+  },
+  "android": {
+    "modules": ["expo.modules.focusservice.ExpoFocusServiceModule"]
+  }
+}
