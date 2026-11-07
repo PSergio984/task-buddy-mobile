@@ -108,6 +108,12 @@ export class FocusServiceProvider implements OrientationProvider {
       // The intent resolves before onCreate runs — claiming coverage
       // before the native flag confirms it would lie about who is live.
       if (!(await this.awaitLifecycle(mod, true))) {
+        // The intent can land late — a service that comes up after our
+        // deadline holds a wake lock unowned (this provider never reached
+        // runningProviders, so teardown never stops it). Send stop and
+        // confirm destruction best-effort before reporting failure.
+        await mod.stopService().catch(() => {});
+        await this.awaitLifecycle(mod, false);
         throw new Error('Focus service did not confirm startup');
       }
       this.running = true;
