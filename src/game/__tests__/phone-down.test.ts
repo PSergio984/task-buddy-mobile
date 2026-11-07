@@ -6,7 +6,6 @@
  */
 import {
   CoverageTracker,
-  DEFAULT_PLATFORM_FACE_DOWN_SIGN,
   FaceDownClassifier,
   PhoneDownMachine,
   resolveSpanTier,
@@ -136,6 +135,7 @@ describe('FaceDownClassifier', () => {
     // Platform.OS under an isolated registry to prove each side.
     jest.isolateModules(() => {
       jest.doMock('react-native', () => ({ Platform: { OS: os } }));
+      // eslint-disable-next-line @typescript-eslint/no-require-imports -- re-require under the doMock'd Platform
       const mod = require('@/game/phone-down') as typeof import('@/game/phone-down');
       expect(mod.DEFAULT_PLATFORM_FACE_DOWN_SIGN).toBe(expected);
     });
