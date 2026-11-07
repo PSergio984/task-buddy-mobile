@@ -119,7 +119,10 @@ export class PhoneDownSession {
 
   private sessionId: number | null = null;
   private runningProviders: OrientationProvider[] = [];
-  private runningRetro: RetroProvider[] = [];
+  /** Each entry's `gen` is the recording token its arm's startRecording
+   *  returned — teardown/bail stops must present it so a stale stop can't
+   *  expire a newer arm's request on the shared recorder. */
+  private runningRetro: { retro: RetroProvider; gen: number }[] = [];
   private spans: ResolvedSpan[] = [];
   private violations: PhoneDownViolation[] = [];
   private suspendedAt: number | null = null;
@@ -252,12 +255,12 @@ export class PhoneDownSession {
     // Providers this arm actually started — a stale continuation must
     // stop ONLY these; shared fields may already belong to a newer arm.
     const startedHere: OrientationProvider[] = [];
-    const retroHere: RetroProvider[] = [];
+    const retroHere: { retro: RetroProvider; gen: number }[] = [];
     const bailIfStale = async (): Promise<boolean> => {
       if (gen === this.armGen) return false;
       await Promise.all([
         ...startedHere.map((p) => p.stop().catch(() => {})),
-        ...retroHere.map((r) => r.stopRecording().catch(() => {})),
+        ...retroHere.map((r) => r.retro.stopRecording(r.gen).catch(() => {})),
       ]);
       return true;
     };
@@ -313,10 +316,11 @@ export class PhoneDownSession {
     for (const retro of this.retroProviders) {
       try {
         if (await retro.isAvailable()) {
-          await retro.startRecording();
-          retroHere.push(retro);
+          const recGen = await retro.startRecording();
+          const entry = { retro, gen: recGen };
+          retroHere.push(entry);
           if (await bailIfStale()) return false;
-          this.runningRetro.push(retro);
+          this.runningRetro.push(entry);
         }
       } catch {
         // Recording failed — gaps for this session resolve 'unknown'.
@@ -539,7 +543,7 @@ export class PhoneDownSession {
   }
 
   private async resolveGap(gap: SuspensionGap): Promise<void> {
-    for (const retro of this.runningRetro) {
+    for (const { retro } of this.runningRetro) {
       try {
         const verdict = await retro.verifyGap(gap.from, gap.to);
         if (verdict !== 'unknown') {
@@ -768,6 +772,9 @@ export class PhoneDownSession {
     // shared instances across arms, so sequential awaits would let a
     // re-arm's start() interleave before a later stop() killed it.
     await Promise.all(providers.map((p) => p.stop().catch(() => {})));
-    await Promise.all(retro.map((r) => r.stopRecording().catch(() => {})));
+    // Present each recording's gen — a re-arm landing mid-teardown bumps
+    // the shared recorder's generation, and firing this stale stop anyway
+    // would expire the NEW arm's request instead of this one's.
+    await Promise.all(retro.map((r) => r.retro.stopRecording(r.gen).catch(() => {})));
   }
 }

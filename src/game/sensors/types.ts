@@ -83,8 +83,14 @@ export interface OrientationProvider {
 export interface RetroProvider {
   readonly name: string;
   isAvailable(): Promise<boolean>;
-  startRecording(): Promise<void>;
-  stopRecording(): Promise<void>;
+  /** Begin recording; resolves a generation token identifying THIS
+   *  request — recorders are process-shared and requests replace, so a
+   *  later arm's start supersedes any older one. */
+  startRecording(): Promise<number>;
+  /** Expire the recording `expectedGen` started. When a newer arm's
+   *  start already replaced it, the stale stop must skip — firing anyway
+   *  would expire the NEW request on the shared recorder. */
+  stopRecording(expectedGen?: number): Promise<void>;
   /** Classify the suspended interval [fromTs, toTs] epoch ms. */
   verifyGap(fromTs: number, toTs: number): Promise<GapVerdict>;
 }

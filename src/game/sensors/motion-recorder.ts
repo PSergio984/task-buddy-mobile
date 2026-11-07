@@ -82,6 +82,10 @@ export class MotionRecorderProvider implements RetroProvider {
   private readonly thresholds: RetroThresholds;
   /** Cap a session's recording window at the 12h CMSensorRecorder limit. */
   private readonly recordSeconds = 43200;
+  /** Monotonic recording generation — bumped synchronously at every
+   *  startRecording invocation so a concurrent teardown snapshot sees the
+   *  newest arm's token, not the request it meant to kill. */
+  private gen = 0;
 
   constructor(thresholds: RetroThresholds = DEFAULT_THRESHOLDS) {
     this.thresholds = thresholds;
@@ -99,15 +103,21 @@ export class MotionRecorderProvider implements RetroProvider {
     }
   }
 
-  async startRecording(): Promise<void> {
+  async startRecording(): Promise<number> {
+    const gen = ++this.gen;
     try {
       await this.module()?.startRecording(this.recordSeconds);
     } catch {
       // Permission denied or unsupported — gaps will resolve 'unknown'.
     }
+    return gen;
   }
 
-  async stopRecording(): Promise<void> {
+  async stopRecording(expectedGen?: number): Promise<void> {
+    // CMSensorRecorder requests REPLACE the outstanding one and the
+    // recorder is shared process-wide — a stale teardown's stop landing
+    // after a newer arm's start would expire the NEW recording.
+    if (expectedGen !== undefined && expectedGen !== this.gen) return;
     try {
       await this.module()?.stopRecording();
     } catch {
