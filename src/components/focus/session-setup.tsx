@@ -268,7 +268,7 @@ export function SessionSetup({
 
       {timer ? (
         <PhoneDownToggle
-          subtitle="Face-down time is verified and reported with the session."
+          subtitle="Face-down time can be verified and reported with the session."
           value={settings.phoneDown}
           onChange={onPhoneDown}
         />
