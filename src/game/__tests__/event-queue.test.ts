@@ -238,9 +238,7 @@ describe('EventQueue', () => {
     const second = await queue.flush();
     expect(second.failed).toBe(false);
     expect(post).toHaveBeenCalledTimes(1);
-    const ids = post.mock.calls[0][0].map(
-      (e: { client_event_id: string }) => e.client_event_id,
-    );
+    const ids = post.mock.calls[0][0].map((e: { client_event_id: string }) => e.client_event_id);
     expect(ids).toEqual(['mobile:uuid-501']);
     expect(storedLen(storage)).toBe(0);
   });
