@@ -221,6 +221,30 @@ describe('EventQueue', () => {
     expect(storedLen(storage)).toBe(0);
   });
 
+  it('a delivered batch is never reposted when a later batch fails', async () => {
+    const post = jest
+      .fn()
+      .mockResolvedValueOnce(okResponse) // batch 1 (500 events) lands
+      .mockRejectedValue(new ApiError(0, 'offline')); // batch 2 fails every retry
+    const { queue, storage } = makeQueue({ post });
+    for (let i = 0; i < 501; i++) await queue.enqueue('e', { i });
+    const first = await queue.flush();
+    expect(first.failed).toBe(true);
+    expect(first.sent).toBe(500);
+    expect(storedLen(storage)).toBe(1);
+    // The retry must post ONLY the pending tail — a regression that
+    // replays the persisted queue would resend batch 1's events.
+    post.mockClear().mockResolvedValue(okResponse);
+    const second = await queue.flush();
+    expect(second.failed).toBe(false);
+    expect(post).toHaveBeenCalledTimes(1);
+    const ids = post.mock.calls[0][0].map(
+      (e: { client_event_id: string }) => e.client_event_id,
+    );
+    expect(ids).toEqual(['mobile:uuid-501']);
+    expect(storedLen(storage)).toBe(0);
+  });
+
   it('a failed batch does not remove events or send later ones twice', async () => {
     const post = jest
       .fn()
