@@ -77,11 +77,16 @@ const styles = StyleSheet.create({
     marginTop: Spacing.four,
     paddingVertical: Spacing.two,
     paddingHorizontal: Spacing.four,
+    // Escape hatches stay tappable under stress — 44px minimum target.
+    minHeight: 44,
+    justifyContent: 'center',
   },
   overlayDisarmText: { color: Colors.accent, fontSize: 14, fontWeight: '600' },
   overlayStop: {
     paddingVertical: Spacing.two,
     paddingHorizontal: Spacing.four,
+    minHeight: 44,
+    justifyContent: 'center',
   },
   overlayStopText: { color: Colors.danger, fontSize: 14, fontWeight: '600' },
 });
