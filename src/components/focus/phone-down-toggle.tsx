@@ -31,7 +31,9 @@ export function PhoneDownToggle({
       </View>
       <Switch
         accessibilityLabel="Phone-down"
-        accessibilityHint={hint ?? undefined}
+        // Disabled-reason hint wins; otherwise the visible subtitle is the
+        // only description a screen reader can reach.
+        accessibilityHint={hint ?? subtitle}
         value={value}
         disabled={disabled}
         onValueChange={onChange}
