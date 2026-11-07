@@ -88,6 +88,13 @@ export class FaceDownClassifier {
     return this.emitted;
   }
 
+  /** Mid-dwell toward face-down — the last emitted direction is stale for
+   *  up to `dwellMs` after the phone actually flipped, so callers must not
+   *  treat 'not yet down' as a measured 'upright' during this window. */
+  get pendingDown(): boolean {
+    return this.pendingDir === true;
+  }
+
   /** Fresh arm — prior `emitted`/dwell state belongs to the last session;
    *  keeping it would suppress the real first edge of the next one. */
   reset(): void {
