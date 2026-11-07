@@ -462,6 +462,21 @@ export class CoverageTracker {
       this.openLiveStart !== null
         ? [...this.live, { start: this.openLiveStart, end }]
         : [...this.live];
+    // A dead interval may span MULTIPLE adjacent suspensions (suspend →
+    // brief foreground without a provider → suspend again). Explain it by
+    // chaining overlapping gaps — requiring one gap to cover the whole
+    // piece downgrades honestly-proven coverage.
+    const gapsCovering = (from: number, to: number): SuspensionGap[] | null => {
+      let g = from;
+      const chain: SuspensionGap[] = [];
+      while (g < to) {
+        const next = this.gaps.find((x) => x.from <= g && x.to > g);
+        if (!next) return null;
+        chain.push(next);
+        g = next.to;
+      }
+      return chain;
+    };
     let cursor = start;
     const spanGaps: SuspensionGap[] = [];
     let unproven = false;
@@ -469,16 +484,16 @@ export class CoverageTracker {
       if (w.end <= cursor || w.start >= end) continue;
       const deadStart = Math.max(cursor, start);
       if (w.start > deadStart) {
-        const gap = this.gaps.find((g) => g.from <= deadStart && g.to >= Math.min(w.start, end));
-        if (gap) spanGaps.push(gap);
+        const chain = gapsCovering(deadStart, Math.min(w.start, end));
+        if (chain) spanGaps.push(...chain);
         else unproven = true;
       }
       cursor = Math.max(cursor, Math.min(w.end, end));
       if (cursor >= end) break;
     }
     if (cursor < end) {
-      const gap = this.gaps.find((g) => g.from <= cursor && g.to >= end);
-      if (gap) spanGaps.push(gap);
+      const chain = gapsCovering(cursor, end);
+      if (chain) spanGaps.push(...chain);
       else unproven = true;
     }
     return {
