@@ -6,6 +6,9 @@ public class ExpoProximityModule: Module {
   /// Block-based observer — Module isn't an NSObject, so @objc/#selector
   /// observation can't be used here.
   private var proximityObserver: NSObjectProtocol?
+  /// True only when THIS module enabled the process-wide monitor — stop
+  /// must not disable a monitor another consumer turned on before us.
+  private var monitoringOwnedByUs = false
 
   public func definition() -> ModuleDefinition {
     Name("ExpoProximity")
@@ -25,6 +28,8 @@ public class ExpoProximityModule: Module {
 
     OnStartObserving("onProximityChange") {
       DispatchQueue.main.async {
+        // Only disable on stop when we were the ones who enabled it.
+        self.monitoringOwnedByUs = !UIDevice.current.isProximityMonitoringEnabled
         UIDevice.current.isProximityMonitoringEnabled = true
         if UIDevice.current.isProximityMonitoringEnabled {
           self.proximityObserver = NotificationCenter.default.addObserver(
@@ -49,7 +54,10 @@ public class ExpoProximityModule: Module {
           NotificationCenter.default.removeObserver(observer)
           self.proximityObserver = nil
         }
-        UIDevice.current.isProximityMonitoringEnabled = false
+        if self.monitoringOwnedByUs {
+          UIDevice.current.isProximityMonitoringEnabled = false
+          self.monitoringOwnedByUs = false
+        }
       }
     }
   }
