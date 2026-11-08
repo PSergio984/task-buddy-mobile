@@ -163,7 +163,9 @@ export default function DiaryScreen() {
         </Pressable>
       </View>
       {/* Only the kind picker gates on the day query — the editor must
-          stay mounted across a targetDay change or a draft dies with it. */}
+          stay mounted while the day reloads or a draft dies with it.
+          Explicit ‹/› navigation still remounts it (the key carries
+          entryDay): a draft belongs to the day it was started on. */}
       {dayQuery.isPending ? (
         <ActivityIndicator color={Colors.accent} />
       ) : dayQuery.isError ? (
@@ -263,6 +265,7 @@ export default function DiaryScreen() {
                 // pages so the new page 1 re-anchors the pagination.
                 setOlder([]);
                 setMoreLeft(null);
+                setLoadError(null);
                 void entriesQuery.refetch();
               }}
               tintColor={Colors.accent}
