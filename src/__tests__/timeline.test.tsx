@@ -81,12 +81,19 @@ const day: TimelineDayResponse = {
 
 async function renderScreen() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  await render(
+  return await render(
     <QueryClientProvider client={client}>
       <TimelineScreen />
     </QueryClientProvider>,
   );
 }
+
+// Cold jest caches lazily load RN internals on the first render — that
+// cost lands inside the running test's 5s budget, so warm it here.
+beforeAll(async () => {
+  (timelineApi.day as jest.Mock).mockResolvedValue(day);
+  (await renderScreen()).unmount();
+}, 30000);
 
 beforeEach(() => {
   jest.clearAllMocks();

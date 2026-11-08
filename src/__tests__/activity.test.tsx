@@ -66,12 +66,20 @@ const stats: ActivityStats = {
 
 async function renderScreen() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  await render(
+  return await render(
     <QueryClientProvider client={client}>
       <ActivityScreen />
     </QueryClientProvider>,
   );
 }
+
+// Cold jest caches lazily load RN internals on the first render — that
+// cost lands inside the running test's 5s budget, so warm it here.
+beforeAll(async () => {
+  (activityApi.grid as jest.Mock).mockResolvedValue(grid);
+  (activityApi.stats as jest.Mock).mockResolvedValue(stats);
+  (await renderScreen()).unmount();
+}, 30000);
 
 beforeEach(() => {
   jest.clearAllMocks();
