@@ -55,12 +55,19 @@ const DEFAULT_KEY = 'task-buddy.game-event-queue';
  *  device can't flush the previous account's unposted evidence under its
  *  own identity (the server attributes ledger rows to the bearer token). */
 export async function purgeEventQueueStorage(): Promise<void> {
+  // The shared instance's in-memory copy survives a disk-only purge —
+  // mounted screens still hold the reference, so abandon it outright.
+  shared?.abandon();
+  shared = null;
   // Same lazy require as createEventQueue — the native module throws at
   // import time under jest.
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const AsyncStorage = require('@react-native-async-storage/async-storage')
     .default as KeyValueStorage;
   await AsyncStorage.removeItem(DEFAULT_KEY);
+  // The dead-letter ledger is account-scoped too — a fresh login must not
+  // inherit the previous account's dropped-count banner.
+  await AsyncStorage.removeItem(`${DEFAULT_KEY}.dead-letters`);
 }
 /** Server caps GameEventBatch.events at 500 — chunk at the same bound. */
 const BATCH_SIZE = 500;
@@ -98,11 +105,43 @@ export class EventQueue {
 
   private events: QueuedEvent[] = [];
   private deadLetters = 0;
+  /** Set by purgeEventQueueStorage — mounted screens holding a stale
+   *  reference can neither flush nor re-persist the old account's queue.
+   *  Calls on an abandoned instance forward to the current shared queue
+   *  (when one exists) so a screen that outlives logout keeps working. */
+  private abandoned = false;
   /** Memoized first-read: concurrent hydrate()/enqueue()/flush() callers
    *  join the same in-flight load instead of racing ahead on an empty
    *  queue and clobbering events that were still being restored. */
   private hydrating: Promise<void> | null = null;
   private flushing: Promise<FlushResult> | null = null;
+  /** Listeners fired after the pending set changes — screens derive
+   *  queued badges from these, and a flush they didn't start (the root
+   *  foreground flush, another screen's retry) would otherwise leave
+   *  them stale. The arg is how many events the flush delivered. */
+  private listeners = new Set<(sent: number) => void>();
+
+  /** The queue a stale reference should talk to — this instance unless it
+   *  was abandoned and a post-login shared queue replaced it. */
+  private delegate(): EventQueue {
+    return this.abandoned && shared !== null ? shared : this;
+  }
+
+  /** Subscribe to pending-set changes; returns the unsubscribe. A stale
+   *  reference forwards to the live queue so a remounted screen still
+   *  hears post-login flushes. */
+  subscribe(listener: (sent: number) => void): () => void {
+    const q = this.delegate();
+    if (q !== this) return q.subscribe(listener);
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  private notify(sent: number): void {
+    for (const listener of this.listeners) listener(sent);
+  }
 
   constructor(options: EventQueueOptions) {
     this.storage = options.storage;
@@ -119,6 +158,8 @@ export class EventQueue {
    *  A corrupt blob resolves to empty and never re-reads (deterministic);
    *  a transient read fault rejects and retries on the next call. */
   hydrate(): Promise<void> {
+    const q = this.delegate();
+    if (q !== this) return q.hydrate();
     this.hydrating ??= this.doHydrate();
     return this.hydrating;
   }
@@ -164,7 +205,8 @@ export class EventQueue {
   /** Events dropped after MAX_FLUSH_ATTEMPTS deterministic rejects —
    *  persisted so a poisoned batch is an honest loss, not a silent one. */
   deadLetterCount(): number {
-    return this.deadLetters;
+    const q = this.delegate();
+    return q !== this ? q.deadLetterCount() : this.deadLetters;
   }
 
   private deadKey(): string {
@@ -172,27 +214,62 @@ export class EventQueue {
   }
 
   private async persist(): Promise<void> {
+    // An abandoned instance must never write — an in-flight flush can
+    // resolve after the purge and would persist [] over the new account's
+    // freshly-enqueued events.
+    if (this.abandoned) return;
     await this.storage.setItem(this.storageKey, JSON.stringify(this.events));
   }
 
   private async persistDeadLetters(): Promise<void> {
+    if (this.abandoned) return;
     await this.storage.setItem(this.deadKey(), String(this.deadLetters));
   }
 
-  /** Queue one event for the next flush. Id assigned via expo-crypto UUID. */
-  async enqueue(type: string, payload: Record<string, unknown>): Promise<QueuedEvent> {
+  /** Drop the in-memory copy and bar further use — a mounted screen's
+   *  stale reference must not flush or re-persist after logout. */
+  abandon(): void {
+    this.abandoned = true;
+    this.events = [];
+  }
+
+  /** Pending events, post-hydrate — screens derive queued badges from these. */
+  pending(): readonly QueuedEvent[] {
+    const q = this.delegate();
+    return q !== this ? q.pending() : this.events;
+  }
+
+  /** Queue one event for the next flush. Id assigned via expo-crypto UUID
+   *  unless the caller supplies one — a REST-fallback event reuses the id
+   *  its lost request already sent so the server dedupe key survives. */
+  async enqueue(
+    type: string,
+    payload: Record<string, unknown>,
+    clientEventId?: string,
+  ): Promise<QueuedEvent> {
+    const q = this.delegate();
+    if (q !== this) return q.enqueue(type, payload, clientEventId);
     // A transient storage fault gets one immediate retry — evidence must not
     // die on a momentary read failure (a durable failure still rejects and is
     // counted by the caller's drop counter, not swallowed silently).
     await this.hydrate().catch(() => this.hydrate());
+    if (this.abandoned) throw new Error('event queue abandoned');
     const event: QueuedEvent = {
-      client_event_id: `mobile:${this.createId()}`,
+      client_event_id: clientEventId ?? `mobile:${this.createId()}`,
       type,
       client_ts: new Date(this.now()).toISOString(),
       payload,
     };
     this.events.push(event);
-    await this.persist();
+    try {
+      await this.persist();
+    } catch (e) {
+      // Reported-as-lost evidence must not silently deliver on the next
+      // flush — roll the in-memory copy back before rethrowing.
+      this.events = this.events.filter((x) => x !== event);
+      throw e;
+    }
+    this.notify(0);
     return event;
   }
 
@@ -211,14 +288,30 @@ export class EventQueue {
    * Re-entrant calls join the in-flight flush instead of double-sending.
    */
   flush(): Promise<FlushResult> {
-    this.flushing ??= this.doFlush().finally(() => {
-      this.flushing = null;
-    });
+    const q = this.delegate();
+    if (q !== this) return q.flush();
+    this.flushing ??= this.doFlush()
+      .then((r) => {
+        this.notify(r.sent);
+        return r;
+      })
+      .catch((e) => {
+        // A faulted flush can still have delivered earlier batches —
+        // refresh badges before the error propagates.
+        this.notify(0);
+        throw e;
+      })
+      .finally(() => {
+        this.flushing = null;
+      });
     return this.flushing;
   }
 
   private async doFlush(): Promise<FlushResult> {
     await this.hydrate();
+    if (this.abandoned) {
+      return { sent: 0, pending: 0, dropped: 0, failed: false };
+    }
     const result: FlushResult = {
       sent: 0,
       pending: this.events.length,
@@ -282,12 +375,22 @@ export class EventQueue {
   }
 }
 
-/** Default app queue — AsyncStorage-backed, posts through gameApi. */
+/** Default app queue — AsyncStorage-backed, posts through gameApi. One
+ *  instance per app: separate queues over the same storage key race
+ *  persist() writes and clobber each other's in-memory events. */
+let shared: EventQueue | null = null;
+
 export function createEventQueue(): EventQueue {
-  // Lazy require: the native AsyncStorage module throws at import time under
-  // jest, and the pure EventQueue must stay loadable for tests/injection.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const AsyncStorage = require('@react-native-async-storage/async-storage')
-    .default as KeyValueStorage;
-  return new EventQueue({ storage: AsyncStorage, post: (events) => gameApi.postEvents(events) });
+  if (!shared) {
+    // Lazy require: the native AsyncStorage module throws at import time under
+    // jest, and the pure EventQueue must stay loadable for tests/injection.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const AsyncStorage = require('@react-native-async-storage/async-storage')
+      .default as KeyValueStorage;
+    shared = new EventQueue({
+      storage: AsyncStorage,
+      post: (events) => gameApi.postEvents(events),
+    });
+  }
+  return shared;
 }

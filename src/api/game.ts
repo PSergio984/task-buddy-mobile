@@ -8,11 +8,35 @@
  */
 import { apiFetch } from './client';
 import type {
+  Achievement,
+  ActivityGrid,
+  ActivityStats,
+  Daily,
+  DailyCheckInput,
+  DailyCheckResponse,
+  DailyInput,
+  DailyPatch,
+  DiaryEntry,
+  DiaryEntryInput,
+  DiaryEntryPatch,
+  DiaryListResponse,
+  GameClass,
   GameEventsFeedResponse,
   GameEventIn,
+  GameProfile,
   GameSyncResponse,
+  GearItem,
+  GearListResponse,
+  Habit,
+  HabitClickDirection,
+  HabitClickResponse,
+  HabitInput,
+  HabitPatch,
+  RetentionPreference,
   SessionActionResponse,
   SessionStartRequest,
+  StatKey,
+  TimelineDayResponse,
 } from './types';
 
 export const gameApi = {
@@ -32,6 +56,125 @@ export const gameApi = {
     if (desc) params.set('desc', '1');
     return apiFetch<GameEventsFeedResponse>(`/api/v1/game/events?${params}`);
   },
+
+  getProfile: () => apiFetch<GameProfile>('/api/v1/game/profile'),
+
+  updateRetention: (retention: RetentionPreference) =>
+    apiFetch<GameProfile>('/api/v1/game/profile/retention', {
+      method: 'PATCH',
+      json: { retention },
+    }),
+
+  updateAvatarConfig: (avatarConfig: Record<string, unknown>) =>
+    apiFetch<GameProfile>('/api/v1/game/profile/avatar', {
+      method: 'PATCH',
+      json: { avatar_config: avatarConfig },
+    }),
+};
+
+/**
+ * Habit CRUD + the online fast-path click. Scoring CAN also ride the
+ * offline event queue (`habit_click` {habit_id, direction}) — screens
+ * prefer this REST call when online (returns fresh habit + profile) and
+ * fall back to the queue when the request can't reach the server.
+ * `client_event_id` is caller-minted per gesture so retries dedupe.
+ */
+export const habitsApi = {
+  list: () => apiFetch<Habit[]>('/api/v1/game/habits'),
+  create: (input: HabitInput) =>
+    apiFetch<Habit>('/api/v1/game/habits', { method: 'POST', json: input }),
+  update: (id: number, patch: HabitPatch) =>
+    apiFetch<Habit>(`/api/v1/game/habits/${id}`, { method: 'PATCH', json: patch }),
+  remove: (id: number) => apiFetch<void>(`/api/v1/game/habits/${id}`, { method: 'DELETE' }),
+  click: (id: number, direction: HabitClickDirection, clientEventId: string) =>
+    apiFetch<HabitClickResponse>(`/api/v1/game/habits/${id}/click`, {
+      method: 'POST',
+      json: { direction, client_event_id: clientEventId },
+    }),
+};
+
+/** Daily CRUD + the online fast-path check — same online/queue split as
+ *  habits (`daily_check` {daily_id, daily_item_id?, done?} on the queue). */
+export const dailiesApi = {
+  list: () => apiFetch<Daily[]>('/api/v1/game/dailies'),
+  create: (input: DailyInput) =>
+    apiFetch<Daily>('/api/v1/game/dailies', { method: 'POST', json: input }),
+  update: (id: number, patch: DailyPatch) =>
+    apiFetch<Daily>(`/api/v1/game/dailies/${id}`, { method: 'PATCH', json: patch }),
+  remove: (id: number) => apiFetch<void>(`/api/v1/game/dailies/${id}`, { method: 'DELETE' }),
+  check: (id: number, input: DailyCheckInput, clientEventId: string) =>
+    apiFetch<DailyCheckResponse>(`/api/v1/game/dailies/${id}/check`, {
+      method: 'POST',
+      json: { ...input, client_event_id: clientEventId },
+    }),
+};
+
+/** Character sheet — allocation, class select, respec, auto-allocate. */
+export const characterApi = {
+  update: (autoAllocate: boolean) =>
+    apiFetch<GameProfile>('/api/v1/game/character', {
+      method: 'PATCH',
+      json: { auto_allocate: autoAllocate },
+    }),
+  allocate: (points: Partial<Record<StatKey, number>>) =>
+    apiFetch<GameProfile>('/api/v1/game/character/allocate', {
+      method: 'POST',
+      json: { points },
+    }),
+  selectClass: (gameClass: GameClass) =>
+    apiFetch<GameProfile>('/api/v1/game/character/class', {
+      method: 'POST',
+      json: { game_class: gameClass },
+    }),
+  respec: () =>
+    apiFetch<GameProfile>('/api/v1/game/character/respec', { method: 'POST', json: {} }),
+};
+
+export const gearApi = {
+  list: () => apiFetch<GearItem[]>('/api/v1/game/gear'),
+  buy: (key: string) =>
+    apiFetch<GearListResponse>('/api/v1/game/gear/buy', { method: 'POST', json: { key } }),
+  equip: (key: string, equipped: boolean) =>
+    apiFetch<GearListResponse>('/api/v1/game/gear/equip', {
+      method: 'POST',
+      json: { key, equipped },
+    }),
+  toggleCostume: (key: string, costume: boolean) =>
+    apiFetch<GearListResponse>('/api/v1/game/gear/costume', {
+      method: 'POST',
+      json: { key, costume },
+    }),
+};
+
+export const achievementsApi = {
+  list: () => apiFetch<Achievement[]>('/api/v1/game/achievements'),
+};
+
+/** Contribution grid + rollup stats (game_tracking endpoints). */
+export const activityApi = {
+  grid: () => apiFetch<ActivityGrid>('/api/v1/game/activity'),
+  stats: () => apiFetch<ActivityStats>('/api/v1/game/activity/stats'),
+};
+
+export const diaryApi = {
+  list: (date?: string, limit?: number, offset?: number) => {
+    const qs = new URLSearchParams();
+    if (date) qs.set('date', date);
+    if (limit !== undefined) qs.set('limit', String(limit));
+    if (offset !== undefined) qs.set('offset', String(offset));
+    const s = qs.toString();
+    return apiFetch<DiaryListResponse>(`/api/v1/game/diary${s ? `?${s}` : ''}`);
+  },
+  create: (input: DiaryEntryInput) =>
+    apiFetch<DiaryEntry>('/api/v1/game/diary', { method: 'POST', json: input }),
+  update: (id: number, patch: DiaryEntryPatch) =>
+    apiFetch<DiaryEntry>(`/api/v1/game/diary/${id}`, { method: 'PATCH', json: patch }),
+  remove: (id: number) => apiFetch<void>(`/api/v1/game/diary/${id}`, { method: 'DELETE' }),
+};
+
+export const timelineApi = {
+  day: (date: string) =>
+    apiFetch<TimelineDayResponse>(`/api/v1/game/timeline?${new URLSearchParams({ date })}`),
 };
 
 export const sessionsApi = {

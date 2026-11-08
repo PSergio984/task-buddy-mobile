@@ -134,7 +134,7 @@ export default function FocusScreen() {
   useEffect(() => {
     sessionIdRef.current = session?.id ?? null;
   }, [session]);
-  const livePhase = session?.phases.find((p) => p.status === 'running' || p.status === 'paused');
+  const livePhase = session?.phases.find((p) => p.status === 'active' || p.status === 'paused');
   useEffect(() => {
     if (
       !session ||

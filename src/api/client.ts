@@ -69,11 +69,29 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
     body = new URLSearchParams(form).toString();
   }
 
+  // A hung socket must not wedge callers forever — the event queue's
+  // `flushing` guard and every screen mutation sit behind this await.
+  // AbortController (not AbortSignal.timeout) — the static helper isn't
+  // in the RN runtime.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 30_000);
   let response: Response;
   try {
-    response = await fetch(`${API_URL}${path}`, { method, headers, body });
+    response = await fetch(`${API_URL}${path}`, {
+      method,
+      headers,
+      body,
+      signal: controller.signal,
+    });
   } catch {
-    throw new ApiError(0, `Cannot reach the server at ${API_URL}`);
+    throw new ApiError(
+      0,
+      controller.signal.aborted
+        ? `The server at ${API_URL} did not respond in time`
+        : `Cannot reach the server at ${API_URL}`,
+    );
+  } finally {
+    clearTimeout(timer);
   }
 
   if (response.status === 204) return undefined as T;

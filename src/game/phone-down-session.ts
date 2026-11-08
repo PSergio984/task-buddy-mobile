@@ -653,9 +653,11 @@ export class PhoneDownSession {
    * session stops. Returns the resolved summary for the end-of-session card.
    */
   async stop(): Promise<PhoneDownSummary> {
-    const now = this.now();
     this.armGen++;
     await this.drainBuffers().catch(() => {});
+    // Re-sampled after the drain — a multi-second drain must not
+    // under-claim STOP ts or miss a grace that expired mid-drain.
+    const now = this.now();
     this.settleGraceIfDue(now);
     if (this.machine.state !== 'idle') {
       this.machine.dispatch({ type: 'STOP', ts: now });
@@ -678,11 +680,11 @@ export class PhoneDownSession {
   /** Toggle off mid-session — same teardown + evidence emission; the
    *  spans earned so far still belong to the session. */
   async disarm(): Promise<PhoneDownSummary> {
-    const now = this.now();
     this.armGen++;
     await this.drainBuffers().catch(() => {});
-    // A grace deadline that passed while suspended must mark the pending
-    // span violated — it must not emit clean just because we disarm now.
+    // Re-sampled after the drain (see stop()) — a grace deadline that
+    // passed while suspended must mark the pending span violated.
+    const now = this.now();
     this.settleGraceIfDue(now);
     if (this.machine.state !== 'idle') {
       this.machine.dispatch({ type: 'STOP', ts: now });

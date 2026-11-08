@@ -7,7 +7,13 @@ import { Colors } from '@/constants/colors';
 
 function SignOutButton() {
   return (
-    <Pressable onPress={() => void logout()} hitSlop={8} style={styles.signOut}>
+    <Pressable
+      onPress={() => void logout()}
+      hitSlop={8}
+      style={styles.signOut}
+      accessibilityRole="button"
+      accessibilityLabel="Sign out"
+    >
       <Text style={styles.signOutText}>Sign out</Text>
     </Pressable>
   );
@@ -62,6 +68,19 @@ export default function TabsLayout() {
           tabBarIcon: ({ color, size }) => (
             <SymbolView
               name={{ ios: 'calendar', android: 'calendar_month', web: 'calendar_month' }}
+              tintColor={color}
+              size={size}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="game"
+        options={{
+          title: 'Game',
+          tabBarIcon: ({ color, size }) => (
+            <SymbolView
+              name={{ ios: 'gamecontroller', android: 'sports_esports', web: 'sports_esports' }}
               tintColor={color}
               size={size}
             />

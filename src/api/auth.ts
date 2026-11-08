@@ -2,6 +2,7 @@
  * Auth for the mobile client: Bearer token stored in expo-secure-store,
  * plus a reactive `useAuth()` hook for the root layout's auth gate.
  */
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { useSyncExternalStore } from 'react';
 
@@ -13,6 +14,8 @@ import type { RegisterResponse, TokenResponse } from './types';
 
 let cachedToken: string | null = null;
 let hydrated = false;
+/** Login email of the account that owns the persisted event queue. */
+const QUEUE_OWNER_KEY = 'task-buddy.queue-owner';
 // useSyncExternalStore requires a stable snapshot reference — mutate this
 // object's contents only via refreshSnapshot().
 let snapshot: { token: string | null; hydrated: boolean } = { token: null, hydrated: false };
@@ -36,9 +39,9 @@ export async function setToken(token: string): Promise<void> {
 export async function clearToken(): Promise<void> {
   cachedToken = null;
   await SecureStore.deleteItemAsync(TOKEN_STORAGE_KEY);
-  // The persisted event queue belongs to this account — a fresh login
-  // must never flush the previous account's evidence under its token.
-  await purgeEventQueueStorage().catch(() => {});
+  // Deliberately NOT purging the event queue here: a 401 (token expiry)
+  // must not destroy days of queued evidence. The queue is cleared on
+  // explicit logout, or on login under a different account — see login().
   emit();
 }
 
@@ -72,11 +75,28 @@ export function useAuth(): { token: string | null; hydrated: boolean } {
 
 /** POST /api/v1/users/token — OAuth2 password form (username carries email). */
 export async function login(email: string, password: string): Promise<void> {
+  const normalized = email.trim().toLowerCase();
   const res = await apiFetch<TokenResponse>('/api/v1/users/token', {
     method: 'POST',
-    form: { username: email.trim().toLowerCase(), password },
+    form: { username: normalized, password },
     auth: false,
   });
+  // The persisted event queue belongs to the account that queued it — a
+  // different account must never flush the previous owner's evidence
+  // under its token. Same-account re-login keeps the queue, so evidence
+  // queued before a token expired still delivers.
+  const prevOwner = await AsyncStorage.getItem(QUEUE_OWNER_KEY);
+  if (prevOwner !== normalized) {
+    // Not best-effort: if the old account's queue can't be removed, the
+    // root flush would post its events under this token. Fail the login.
+    try {
+      await purgeEventQueueStorage();
+    } catch (err) {
+      console.warn('event queue purge failed before login', err);
+      throw new Error('Could not clear the previous session’s queued data — try again.');
+    }
+  }
+  await AsyncStorage.setItem(QUEUE_OWNER_KEY, normalized);
   await setToken(res.access_token);
 }
 
@@ -108,5 +128,9 @@ export async function logout(): Promise<void> {
     // Best-effort server logout — offline must not strand the session.
   } finally {
     await clearToken();
+    await AsyncStorage.removeItem(QUEUE_OWNER_KEY);
+    await purgeEventQueueStorage().catch((err) =>
+      console.warn('event queue purge failed on logout', err),
+    );
   }
 }

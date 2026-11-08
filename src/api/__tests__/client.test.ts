@@ -73,6 +73,12 @@ describe('apiFetch', () => {
     await expect(apiFetch('/x')).rejects.toMatchObject({ status: 0 });
   });
 
+  it('passes an AbortSignal so a hung socket cannot wedge callers', async () => {
+    fetchMock.mockReturnValue(respond(200, '{}'));
+    await apiFetch('/x');
+    expect(fetchMock.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal);
+  });
+
   it('returns undefined for 204 without parsing a body', async () => {
     fetchMock.mockReturnValue(respond(204, null));
     await expect(apiFetch('/x')).resolves.toBeUndefined();

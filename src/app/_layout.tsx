@@ -3,10 +3,12 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
+import { AppState } from 'react-native';
 
 import { hydrateAuth, useAuth } from '@/api/auth';
 import { ApiError } from '@/api/client';
 import { Colors } from '@/constants/colors';
+import { createEventQueue } from '@/game/event-queue';
 
 void SplashScreen.preventAutoHideAsync();
 
@@ -28,6 +30,34 @@ export default function RootLayout() {
   useEffect(() => {
     hydrateAuth().finally(() => void SplashScreen.hideAsync());
   }, []);
+
+  // Cached rows belong to the account that fetched them — a fresh login
+  // must never render the previous user's data while it refetches.
+  useEffect(() => {
+    if (token === null && hydrated) queryClient.clear();
+  }, [token, hydrated]);
+
+  // Offline gestures (habit clicks, daily checks, phone-down evidence)
+  // only flush when a consumer screen mounts — a reconnect while the app
+  // sits on an unrelated screen would leave them parked. Foregrounding
+  // is the natural delivery point; gated on token so a flush never posts
+  // unauthenticated. Run once at install too — the token can arrive while
+  // the app is already foregrounded (cold launch, fresh login).
+  useEffect(() => {
+    if (!token) return;
+    const flush = () => {
+      const queue = createEventQueue();
+      void queue
+        .hydrate()
+        .then(() => queue.flush())
+        .catch(() => {});
+    };
+    if (AppState.currentState === 'active') flush();
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') flush();
+    });
+    return () => sub.remove();
+  }, [token]);
 
   // Auth gate: no stored token → /login; token on /login → tasks.
   useEffect(() => {
@@ -56,6 +86,7 @@ export default function RootLayout() {
         <Stack.Screen name="login" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="task/[id]" options={{ title: 'Task' }} />
+        <Stack.Screen name="game" options={{ headerShown: false }} />
       </Stack>
     </QueryClientProvider>
   );

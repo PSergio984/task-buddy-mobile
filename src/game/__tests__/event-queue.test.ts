@@ -340,4 +340,75 @@ describe('EventQueue', () => {
     await queue.flush();
     expect(post.mock.calls[0][0]).toHaveLength(1);
   });
+
+  it('enqueue honors a caller-supplied client_event_id for REST-fallback dedupe', async () => {
+    const { queue, post } = makeQueue();
+    // The REST call already sent this id — the replay must reuse it so a
+    // response lost in transit can't double-score the gesture.
+    await queue.enqueue('habit_click', { habit_id: 3, direction: 'positive' }, 'mobile:rest-id');
+    await queue.flush();
+    expect(post.mock.calls[0][0][0].client_event_id).toBe('mobile:rest-id');
+  });
+
+  it('pending() exposes queued events post-hydrate and empties after flush', async () => {
+    const { queue, storage } = makeQueue();
+    (storage as MemoryStorage).map.set(
+      'task-buddy.game-event-queue',
+      JSON.stringify([
+        {
+          client_event_id: 'x',
+          type: 'habit_click',
+          client_ts: 't',
+          payload: { habit_id: 3 },
+        },
+      ]),
+    );
+    await queue.hydrate();
+    expect(queue.pending().map((e) => e.client_event_id)).toEqual(['x']);
+    await queue.flush();
+    expect(queue.pending()).toHaveLength(0);
+  });
+
+  it('abandon() bars enqueue and flush — a stale reference is inert', async () => {
+    const { queue, post } = makeQueue();
+    await queue.enqueue('a', { n: 1 });
+    queue.abandon();
+    await expect(queue.enqueue('b', { n: 2 })).rejects.toThrow('abandoned');
+    const res = await queue.flush();
+    expect(res).toMatchObject({ sent: 0, pending: 0, failed: false });
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it('subscribe() reports enqueues as 0 and delivered counts on flush', async () => {
+    const { queue } = makeQueue();
+    const seen: number[] = [];
+    const unsub = queue.subscribe((sent) => seen.push(sent));
+    await queue.enqueue('habit_click', { habit_id: 1 });
+    expect(seen).toEqual([0]);
+    const res = await queue.flush();
+    expect(res.sent).toBe(1);
+    expect(seen).toEqual([0, 1]);
+    unsub();
+    await queue.enqueue('habit_click', { habit_id: 2 });
+    expect(seen).toEqual([0, 1]);
+  });
+
+  it('a failed flush still notifies (0) so listeners resync badges', async () => {
+    const post = jest.fn().mockRejectedValue(new ApiError(0, 'down'));
+    const { queue } = makeQueue({ post });
+    const seen: number[] = [];
+    queue.subscribe((s) => seen.push(s));
+    await queue.enqueue('habit_click', { habit_id: 1 });
+    const res = await queue.flush();
+    expect(res.failed).toBe(true);
+    expect(seen).toEqual([0, 0]);
+  });
+
+  it('enqueue rolls the event back when persist fails', async () => {
+    const storage = new MemoryStorage();
+    const { queue } = makeQueue({ storage });
+    storage.setItem = () => Promise.reject(new Error('disk full'));
+    await expect(queue.enqueue('habit_click', { habit_id: 1 })).rejects.toThrow('disk full');
+    expect(queue.pending()).toHaveLength(0);
+  });
 });

@@ -13,6 +13,8 @@ export const Colors = {
   accent: '#C2A388',
   danger: '#F87171', // red-400
   success: '#4ADE80', // green-400
+  gold: '#FBBF24', // amber-400 — currency, achievements, unspent points
+  xp: '#38BDF8', // sky-400 — the XP bar, web parity
 } as const;
 
 export const Spacing = {

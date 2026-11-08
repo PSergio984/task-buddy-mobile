@@ -3,6 +3,7 @@
  * confirm-email contract (token must NOT be stored), and logout
  * clearing local state even when the server call fails.
  */
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 
 import { clearToken, hydrateAuth, login, logout, register, setToken } from '../auth';
@@ -13,6 +14,15 @@ jest.mock('expo-secure-store', () => ({
   setItemAsync: jest.fn(),
   deleteItemAsync: jest.fn(),
 }));
+
+// The shipped mock is a bare CJS object — give it an esModule default so
+// event-queue.ts's `require(...).default` resolves to the same store.
+jest.mock('@react-native-async-storage/async-storage', () => {
+  const m = jest.requireActual(
+    '@react-native-async-storage/async-storage/jest/async-storage-mock',
+  ) as object;
+  return { ...m, __esModule: true, default: m };
+});
 
 const getItem = SecureStore.getItemAsync as jest.Mock;
 const setItem = SecureStore.setItemAsync as jest.Mock;
@@ -73,6 +83,27 @@ describe('endpoints', () => {
     const body = fetchMock.mock.calls[0][1].body as string;
     expect(body).toContain('username=e%40x.com');
     expect(body).toContain('password=password123');
+  });
+
+  it('login under a different account purges the persisted event queue', async () => {
+    await AsyncStorage.setItem('task-buddy.queue-owner', 'a@x.com');
+    await AsyncStorage.setItem('task-buddy.game-event-queue', '[{"client_event_id":"e1"}]');
+    await AsyncStorage.setItem('task-buddy.game-event-queue.dead-letters', '3');
+    fetchMock.mockReturnValue(respond(200, '{"access_token":"jwt1","token_type":"bearer"}'));
+    await login('b@x.com', 'password123');
+    expect(await AsyncStorage.getItem('task-buddy.game-event-queue')).toBeNull();
+    expect(await AsyncStorage.getItem('task-buddy.game-event-queue.dead-letters')).toBeNull();
+    expect(await AsyncStorage.getItem('task-buddy.queue-owner')).toBe('b@x.com');
+  });
+
+  it('login under the same account keeps the persisted event queue', async () => {
+    await AsyncStorage.setItem('task-buddy.queue-owner', 'a@x.com');
+    await AsyncStorage.setItem('task-buddy.game-event-queue', '[{"client_event_id":"e1"}]');
+    fetchMock.mockReturnValue(respond(200, '{"access_token":"jwt1","token_type":"bearer"}'));
+    await login('a@x.com', 'password123');
+    expect(await AsyncStorage.getItem('task-buddy.game-event-queue')).toBe(
+      '[{"client_event_id":"e1"}]',
+    );
   });
 
   it('register does NOT store the token (email must be confirmed first)', async () => {
