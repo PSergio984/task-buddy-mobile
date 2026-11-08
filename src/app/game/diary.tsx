@@ -85,11 +85,15 @@ export default function DiaryScreen() {
   // The editor targets `entryDay` (today by default) — the ‹› stepper
   // backfills missed days; the API accepts entry_date on create.
   const [entryDay, setEntryDay] = useState<UtcDay | null>(null);
-  const targetDay = entryDay ?? today;
+  // Frozen at mount: after UTC rollover a draft keeps the day it was
+  // started on (and submits there) instead of remounting empty or
+  // silently landing on the new day. ‹› steps out of the pin explicitly.
+  const [pinnedDay] = useState(today);
+  const targetDay = entryDay ?? pinnedDay;
   // One stand-up per (user, UTC day) — the backend unique-indexes it, so
   // the editor stops offering the kind once that day's exists. Gated on
-  // the list having loaded: an empty `entries` while pending would offer
-  // a kind that 422s on submit.
+  // the list having loaded — and on page 1 only: a standup beyond
+  // has_more still 422s on submit (the server remains the authority).
   const hasDayStandup = entries.some((e) => e.kind === 'standup' && e.entry_date === targetDay);
   const editorKind = hasDayStandup ? 'freeform' : kind;
 
@@ -141,11 +145,12 @@ export default function DiaryScreen() {
               ))}
             </View>
           ) : null}
-          {/* Keyed on draftKey + kind + target day — a successful create
-              remounts the editor empty while a failed submit keeps the
-              draft for retry. */}
+          {/* Keyed on draftKey + kind + the explicit nav day — a
+              successful create remounts the editor empty, a failed
+              submit keeps the draft, and UTC rollover can't steal one
+              (entryDay is still null, so the key doesn't move). */}
           <DiaryEntryEditor
-            key={`new-${draftKey}-${editorKind}-${targetDay}`}
+            key={`new-${draftKey}-${editorKind}-${entryDay ?? 'pinned'}`}
             kind={editorKind}
             submitLabel={editorKind === 'standup' ? 'Save stand-up' : 'Add entry'}
             busy={busy}

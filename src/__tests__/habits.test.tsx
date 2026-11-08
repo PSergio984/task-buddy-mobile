@@ -44,9 +44,11 @@ jest.mock('expo-router', () => ({
   Stack: { Screen: () => null },
 }));
 
-// Deterministic client_event_id for click assertions.
+// Sequential client_event_ids — a constant would let a per-call mint
+// produce divergent REST/queue ids without tripping an assertion.
+let mockUuidN = 0;
 jest.mock('expo-crypto', () => ({
-  randomUUID: jest.fn(() => 'uuid-test'),
+  randomUUID: jest.fn(() => `uuid-${++mockUuidN}`),
 }));
 
 // Native SymbolView isn't loadable under jest — the rows' labels are the
@@ -145,7 +147,11 @@ describe('HabitsScreen', () => {
       fireEvent.press(screen.getByLabelText('+click Read pages'));
     });
     await waitFor(() =>
-      expect(habitsApi.click).toHaveBeenCalledWith(1, 'positive', 'mobile:uuid-test'),
+      expect(habitsApi.click).toHaveBeenCalledWith(
+        1,
+        'positive',
+        expect.stringMatching(/^mobile:/),
+      ),
     );
     expect(mockEnqueue).not.toHaveBeenCalled();
   });
@@ -158,15 +164,15 @@ describe('HabitsScreen', () => {
     await act(async () => {
       fireEvent.press(screen.getByLabelText('+click Read pages'));
     });
-    await waitFor(() =>
-      expect(mockEnqueue).toHaveBeenCalledWith(
-        'habit_click',
-        {
-          habit_id: 1,
-          direction: 'positive',
-        },
-        'mobile:uuid-test',
-      ),
+    await waitFor(() => expect(mockEnqueue).toHaveBeenCalled());
+    // The dedupe contract: the queued replay must carry the SAME id the
+    // lost REST attempt sent — a divergent id double-scores.
+    const restEid = (habitsApi.click as jest.Mock).mock.calls[0][2];
+    expect(restEid).toMatch(/^mobile:/);
+    expect(mockEnqueue).toHaveBeenCalledWith(
+      'habit_click',
+      { habit_id: 1, direction: 'positive' },
+      restEid,
     );
     expect(mockFlush).toHaveBeenCalled();
   });

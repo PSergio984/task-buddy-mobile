@@ -115,12 +115,12 @@ export default function TimelineScreen() {
           <View style={styles.section}>
             <Text style={styles.error}>Couldn’t load this day’s timeline.</Text>
             <Pressable
-              style={styles.navButton}
+              style={styles.retryButton}
               onPress={() => void timeline.refetch()}
               accessibilityRole="button"
               accessibilityLabel="Retry"
             >
-              <Text style={styles.todayText}>Retry</Text>
+              <Text style={styles.retryText}>Retry</Text>
             </Pressable>
           </View>
         ) : data !== undefined ? (
@@ -187,6 +187,21 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 1,
     textTransform: 'uppercase',
+  },
+  retryButton: {
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.four,
+    backgroundColor: Colors.backgroundElement,
+    borderRadius: 10,
+  },
+  retryText: {
+    color: Colors.accent,
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    textAlign: 'center',
   },
   error: { color: Colors.textSecondary, fontSize: 14, textAlign: 'center' },
   empty: { color: Colors.textSecondary, fontSize: 14, textAlign: 'center' },

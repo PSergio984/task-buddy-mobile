@@ -69,7 +69,7 @@ function ClickButton({ habit, direction, disabled, onPress }: ClickButtonProps) 
 interface HabitRowProps {
   habit: Habit;
   /** Click in flight — the ± buttons stay disabled so a double-tap can't
-   *  double-score (each tap mints its own client_event_id server-side). */
+   *  double-score (each tap mints a fresh client_event_id client-side). */
   clicking: boolean;
   /** A click is parked in the offline queue awaiting sync. */
   queued: boolean;

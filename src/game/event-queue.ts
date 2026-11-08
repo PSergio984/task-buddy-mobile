@@ -65,6 +65,9 @@ export async function purgeEventQueueStorage(): Promise<void> {
   const AsyncStorage = require('@react-native-async-storage/async-storage')
     .default as KeyValueStorage;
   await AsyncStorage.removeItem(DEFAULT_KEY);
+  // The dead-letter ledger is account-scoped too — a fresh login must not
+  // inherit the previous account's dropped-count banner.
+  await AsyncStorage.removeItem(`${DEFAULT_KEY}.dead-letters`);
 }
 /** Server caps GameEventBatch.events at 500 — chunk at the same bound. */
 const BATCH_SIZE = 500;

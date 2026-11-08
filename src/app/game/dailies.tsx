@@ -84,10 +84,13 @@ export default function DailiesScreen() {
       void queryClient.invalidateQueries({ queryKey: [key] });
     }
   };
-  /** Offline replays carry no fresh rows — refetch everything scored. */
+  /** Offline replays carry no fresh rows — refetch everything scored. The
+   *  queue is one shared FIFO, so a flush here may also deliver
+   *  habit_click events — 'habits' must invalidate too. */
   const invalidateAfterScore = () => {
     for (const key of [
       'dailies',
+      'habits',
       'game-profile',
       'timeline',
       'activity-grid',
@@ -169,10 +172,15 @@ export default function DailiesScreen() {
             eid,
           );
           refreshQueued();
-          const res = await queue.flush();
-          setDeadLetters(queue.deadLetterCount());
-          refreshQueued();
-          if (res.sent > 0) invalidateAfterScore();
+          try {
+            const res = await queue.flush();
+            setDeadLetters(queue.deadLetterCount());
+            refreshQueued();
+            if (res.sent > 0) invalidateAfterScore();
+          } catch {
+            // Enqueue already persisted — a flush fault can't lose it.
+            setActionError('Check queued — it will sync when you are back online.');
+          }
         } catch {
           setActionError('Could not queue the check — it was not recorded.');
         }

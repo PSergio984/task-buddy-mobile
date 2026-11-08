@@ -45,9 +45,11 @@ jest.mock('expo-router', () => ({
   Stack: { Screen: () => null },
 }));
 
-// Deterministic client_event_id for check assertions.
+// Sequential client_event_ids — a constant would let a per-call mint
+// produce divergent REST/queue ids without tripping an assertion.
+let mockUuidN = 0;
 jest.mock('expo-crypto', () => ({
-  randomUUID: jest.fn(() => 'uuid-test'),
+  randomUUID: jest.fn(() => `uuid-${++mockUuidN}`),
 }));
 
 // Native SymbolView isn't loadable under jest — the rows' labels are the
@@ -134,7 +136,11 @@ describe('DailiesScreen', () => {
       fireEvent.press(screen.getByLabelText('Check Morning workout'));
     });
     await waitFor(() =>
-      expect(dailiesApi.check).toHaveBeenCalledWith(5, { done: true }, 'mobile:uuid-test'),
+      expect(dailiesApi.check).toHaveBeenCalledWith(
+        5,
+        { done: true },
+        expect.stringMatching(/^mobile:/),
+      ),
     );
     expect(mockEnqueue).not.toHaveBeenCalled();
   });
@@ -155,7 +161,7 @@ describe('DailiesScreen', () => {
       expect(dailiesApi.check).toHaveBeenCalledWith(
         5,
         { daily_item_id: 11, done: true },
-        'mobile:uuid-test',
+        expect.stringMatching(/^mobile:/),
       ),
     );
   });
@@ -176,7 +182,7 @@ describe('DailiesScreen', () => {
       expect(dailiesApi.check).toHaveBeenCalledWith(
         5,
         { daily_item_id: 12, done: false },
-        'mobile:uuid-test',
+        expect.stringMatching(/^mobile:/),
       ),
     );
   });
@@ -189,16 +195,15 @@ describe('DailiesScreen', () => {
     await act(async () => {
       fireEvent.press(screen.getByLabelText('Check Warm up'));
     });
-    await waitFor(() =>
-      expect(mockEnqueue).toHaveBeenCalledWith(
-        'daily_check',
-        {
-          daily_id: 5,
-          daily_item_id: 11,
-          done: true,
-        },
-        'mobile:uuid-test',
-      ),
+    await waitFor(() => expect(mockEnqueue).toHaveBeenCalled());
+    // The dedupe contract: the queued replay must carry the SAME id the
+    // lost REST attempt sent — a divergent id double-scores.
+    const restEid = (dailiesApi.check as jest.Mock).mock.calls[0][2];
+    expect(restEid).toMatch(/^mobile:/);
+    expect(mockEnqueue).toHaveBeenCalledWith(
+      'daily_check',
+      { daily_id: 5, daily_item_id: 11, done: true },
+      restEid,
     );
     expect(mockFlush).toHaveBeenCalled();
   });

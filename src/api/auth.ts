@@ -38,7 +38,9 @@ export async function clearToken(): Promise<void> {
   await SecureStore.deleteItemAsync(TOKEN_STORAGE_KEY);
   // The persisted event queue belongs to this account — a fresh login
   // must never flush the previous account's evidence under its token.
-  await purgeEventQueueStorage().catch(() => {});
+  await purgeEventQueueStorage().catch((err) =>
+    console.warn('event queue purge failed on logout', err),
+  );
   emit();
 }
 
