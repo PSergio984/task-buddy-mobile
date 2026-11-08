@@ -68,6 +68,19 @@ export default function TabsLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="game"
+        options={{
+          title: 'Game',
+          tabBarIcon: ({ color, size }) => (
+            <SymbolView
+              name={{ ios: 'gamecontroller', android: 'sports_esports', web: 'sports_esports' }}
+              tintColor={color}
+              size={size}
+            />
+          ),
+        }}
+      />
     </Tabs>
   );
 }

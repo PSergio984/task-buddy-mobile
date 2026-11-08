@@ -287,6 +287,273 @@ export interface PhoneDownViolationPayload {
   kind: PhoneDownViolationKind;
 }
 
+/* --- Game UI parity surfaces (#71) — all mirror app/schemas/game*.py --- */
+
+/** Diary/timeline read horizon — RetentionIn on the backend. */
+export type RetentionPreference = '90d' | '1y' | 'forever';
+
+export type GameClass = 'warrior' | 'mage' | 'healer' | 'rogue';
+
+/** Allocatable stat keys — engine.STAT_KEYS; values index <stat>_stat. */
+export type StatKey = 'str' | 'int' | 'con' | 'per';
+
+/** GearItemRead — one catalog row merged with the viewer's flags. */
+export interface GearItem {
+  key: string;
+  name: string;
+  /** "weapon" | "armor" | "head" | "shield" | "body" | "back" | "eyewear". */
+  slot: string;
+  /** Class lock — "all" or a GameClass. */
+  klass: string;
+  tier: number;
+  stats: Record<string, number>;
+  cost: number;
+  losable: boolean;
+  owned: boolean;
+  equipped: boolean;
+  costume?: boolean;
+}
+
+export interface GearListResponse {
+  items: GearItem[];
+  profile: GameProfile;
+}
+
+export interface Achievement {
+  key: string;
+  name: string;
+  description: string | null;
+  gold_reward: number;
+  /** null until the badge is granted. */
+  earned_at: string | null;
+}
+
+/** Habits — Habit* contracts. Scoring rides the offline event queue
+ *  (`habit_click` {habit_id, direction}); the REST endpoints are for CRUD
+ *  and the online fast-path click. */
+export type HabitDirection = 'positive' | 'negative' | 'both';
+export type HabitClickDirection = 'positive' | 'negative';
+
+export interface Habit {
+  id: number;
+  title: string;
+  notes: string | null;
+  direction: HabitDirection;
+  difficulty: SessionDifficulty;
+  /** Engine-owned drift state, clamped [-47.27, +21.27] on the backend. */
+  value: number;
+  /** Net +clicks minus −clicks. */
+  counter: number;
+  /** Auto-+click per completed focus phase. */
+  bind_focus: boolean;
+  reminder_times: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface HabitInput {
+  title: string;
+  notes?: string | null;
+  direction?: HabitDirection;
+  difficulty?: SessionDifficulty;
+  reminder_times?: string[];
+  bind_focus?: boolean;
+}
+
+export type HabitPatch = Partial<HabitInput>;
+
+export interface HabitClickResponse {
+  habit: Habit;
+  profile: GameProfile;
+  status: 'applied' | 'duplicate';
+  server_time: string;
+}
+
+/** Dailies — Daily and Recurrence contracts. */
+export type Recurrence =
+  | { kind: 'daily' }
+  | { kind: 'weekdays'; days: number[] }
+  | { kind: 'every_n_days'; interval: number; anchor?: string | null }
+  | { kind: 'times_per_week'; count: number };
+
+export interface DailyItem {
+  id: number;
+  title: string;
+  position: number;
+  done_today: boolean;
+}
+
+export interface Daily {
+  id: number;
+  title: string;
+  notes: string | null;
+  difficulty: SessionDifficulty;
+  recurrence: Recurrence;
+  streak: number;
+  active: boolean;
+  reminder_times: string[];
+  items: DailyItem[];
+  /** The day's whole-daily mark; item checks can complete it implicitly. */
+  completed_today: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DailyItemInput {
+  title: string;
+  position?: number;
+}
+
+export interface DailyInput {
+  title: string;
+  notes?: string | null;
+  difficulty?: SessionDifficulty;
+  recurrence?: Recurrence;
+  /** On update the provided list fully replaces the checklist. */
+  items?: DailyItemInput[];
+  reminder_times?: string[];
+  /** Engine-owned on create; only meaningful on update (pause/resume). */
+  active?: boolean;
+}
+
+/** `active` is engine-owned on create — splitting it out keeps the PATCH
+ *  contract honest about which writes can pause/resume a daily. */
+export type DailyPatch = Partial<Omit<DailyInput, 'active'>> & {
+  active?: boolean;
+};
+
+export interface DailyCheckInput {
+  /** Omit to check the whole daily (pays the items' remaining share). */
+  daily_item_id?: number | null;
+  /** false un-marks without clawing back already-paid rewards. */
+  done?: boolean;
+}
+
+export interface DailyCheckResponse {
+  daily: Daily;
+  profile: GameProfile;
+  status: 'applied' | 'duplicate';
+  server_time: string;
+}
+
+/** Activity tracking — game_tracking contracts (contribution grid + stats). */
+export interface ActivityDay {
+  /** UTC calendar day, "YYYY-MM-DD". */
+  date: string;
+  score: number;
+  focus_minutes: number;
+  /** Score-eligible per-type counts — not raw ledger activity. */
+  events: Record<string, number>;
+  /** Server-computed intensity bucket (index into tier_thresholds). */
+  tier: number;
+}
+
+export interface ActivityGrid {
+  start: string;
+  end: string;
+  /** One row per UTC day in [start, end] — the server fills empty days. */
+  days: ActivityDay[];
+  /** Sorted score cutoffs: tier n applies when score >= tier_thresholds[n-1]. */
+  tier_thresholds: number[];
+  server_time: string;
+}
+
+export interface ActivityStats {
+  start: string;
+  end: string;
+  avg_hours_per_day: number;
+  total_hours: number;
+  current_streak: number;
+  longest_streak: number;
+  best_day: { date: string; score: number } | null;
+  /** Score sum over the 7 days ending at server-today, clipped to the window. */
+  weekly_total: number;
+  /** Per-activity-label speedrun personal bests (#69). */
+  speedrun_pbs: SpeedrunPB[];
+  server_time: string;
+}
+
+/** One beat-your-best record row — speedrun_pbs[] in ActivityStats. */
+export interface SpeedrunPB {
+  activity_label: string;
+  best_seconds: number;
+  attempts: number;
+  set_at: string;
+  /** Sub-60s runs don't make the board; absent on older backends (?? []). */
+  recent_attempts?: { seconds: number; ended_at: string }[];
+}
+
+/** Diary — Diary* contracts. */
+export type DiaryEntryKind = 'standup' | 'freeform';
+
+export interface DiaryEntry {
+  id: number;
+  kind: DiaryEntryKind;
+  /** UTC calendar day, "YYYY-MM-DD". */
+  entry_date: string;
+  good: string | null;
+  bad: string | null;
+  next: string | null;
+  freeform: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DiaryEntryInput {
+  kind: DiaryEntryKind;
+  /** Missing → today (UTC). Client may backfill a missed day. */
+  entry_date?: string;
+  good?: string | null;
+  bad?: string | null;
+  next?: string | null;
+  freeform?: string | null;
+}
+
+export type DiaryEntryPatch = Partial<Pick<DiaryEntry, 'good' | 'bad' | 'next' | 'freeform'>>;
+
+export interface DiaryListResponse {
+  entries: DiaryEntry[];
+  has_more: boolean;
+}
+
+/** Timeline — TimelineDayResponse contracts. */
+export interface TimelinePhase {
+  seq: number;
+  kind: string;
+  status: string;
+  planned_seconds: number;
+  actual_seconds: number | null;
+  started_at: string | null;
+  ended_at: string | null;
+}
+
+export interface TimelineSessionBlock {
+  id: number;
+  mode: string;
+  status: string;
+  task_id: number | null;
+  activity_label: string | null;
+  started_at: string;
+  ended_at: string | null;
+  duration_seconds: number;
+  phases: TimelinePhase[];
+}
+
+export interface TimelineMarker {
+  id: number;
+  type: string;
+  ts: string;
+  outcome: Record<string, unknown> | null;
+}
+
+export interface TimelineDayResponse {
+  date: string;
+  sessions: TimelineSessionBlock[];
+  markers: TimelineMarker[];
+  diary: DiaryEntry[];
+  server_time: string;
+}
+
 /* --- Auth --- */
 
 export interface AuthUser {
