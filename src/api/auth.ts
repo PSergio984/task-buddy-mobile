@@ -87,9 +87,14 @@ export async function login(email: string, password: string): Promise<void> {
   // queued before a token expired still delivers.
   const prevOwner = await AsyncStorage.getItem(QUEUE_OWNER_KEY);
   if (prevOwner !== normalized) {
-    await purgeEventQueueStorage().catch((err) =>
-      console.warn('event queue purge failed before login', err),
-    );
+    // Not best-effort: if the old account's queue can't be removed, the
+    // root flush would post its events under this token. Fail the login.
+    try {
+      await purgeEventQueueStorage();
+    } catch (err) {
+      console.warn('event queue purge failed before login', err);
+      throw new Error('Could not clear the previous session’s queued data — try again.');
+    }
   }
   await AsyncStorage.setItem(QUEUE_OWNER_KEY, normalized);
   await setToken(res.access_token);

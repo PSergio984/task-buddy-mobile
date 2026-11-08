@@ -70,6 +70,13 @@ export function AvatarSection({
   useEffect(() => {
     requested.current = null;
   }, [rawConfig]);
+  // A failed save must not become the next patch's base — when a request
+  // settles without the server echo changing, drop the rejected config.
+  const wasPending = useRef(false);
+  useEffect(() => {
+    if (wasPending.current && !pending) requested.current = null;
+    wasPending.current = pending;
+  }, [pending]);
 
   // Every save path carries a non-empty seed — an absent seed must persist
   // as the fallback the preview shows, not '' (avatarConfigToUrl(null) →

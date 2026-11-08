@@ -1,7 +1,7 @@
 /**
- * UTC-day helper tests — the suite runs on non-UTC machines, so
- * utcTimeLabel must pin offset-less backend timestamps to UTC or these
- * assertions drift with the host timezone.
+ * UTC-day helper tests — utcTimeLabel must pin offset-less backend
+ * timestamps to UTC; without the pin these assertions drift with the
+ * host machine's timezone.
  */
 import { addUtcDays, utcTimeLabel } from '@/components/activity/dates';
 

@@ -50,12 +50,16 @@ export default function DiaryScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const hasMore = moreLeft ?? entriesQuery.data?.has_more === true;
 
+  const [loadError, setLoadError] = useState<string | null>(null);
   const loadMore = async () => {
     setLoadingMore(true);
+    setLoadError(null);
     try {
       const res = await diaryApi.list(undefined, PAGE, PAGE + older.length);
       setOlder((o) => [...o, ...res.entries]);
       setMoreLeft(res.has_more);
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : 'Could not load older entries.');
     } finally {
       setLoadingMore(false);
     }
@@ -124,7 +128,9 @@ export default function DiaryScreen() {
   });
   const hasDayStandup =
     dayQuery.isSuccess && dayQuery.data.entries.some((e) => e.kind === 'standup');
-  const editorKind = hasDayStandup ? 'freeform' : kind;
+  // Until the day's contents are known (pending or failed), offer only
+  // freeform — a standup submit without the day check can 409.
+  const editorKind = dayQuery.isSuccess && !hasDayStandup ? kind : 'freeform';
 
   const header = (
     <View style={styles.headerCard}>
@@ -156,50 +162,50 @@ export default function DiaryScreen() {
           <Text style={styles.dayNavButtonText}>›</Text>
         </Pressable>
       </View>
+      {/* Only the kind picker gates on the day query — the editor must
+          stay mounted across a targetDay change or a draft dies with it. */}
       {dayQuery.isPending ? (
         <ActivityIndicator color={Colors.accent} />
-      ) : (
-        <>
-          {dayQuery.isError ? (
-            <Text style={styles.error}>
-              Couldn’t check this day — stand-up disabled to avoid a rejected submit.
-            </Text>
-          ) : null}
-          {!hasDayStandup && !dayQuery.isError ? (
-            <View style={styles.kindPicker} accessibilityRole="radiogroup">
-              {KINDS.map((k) => (
-                <Pressable
-                  key={k}
-                  style={[styles.kindOption, editorKind === k && styles.kindOptionActive]}
-                  onPress={() => setKind(k)}
-                  accessibilityRole="radio"
-                  accessibilityState={{ selected: editorKind === k }}
-                  accessibilityLabel={k === 'standup' ? 'Stand-up' : 'Freeform'}
+      ) : dayQuery.isError ? (
+        <Text style={styles.error}>
+          Couldn’t check this day — stand-up disabled to avoid a rejected submit.
+        </Text>
+      ) : null}
+      <>
+        {!hasDayStandup && dayQuery.isSuccess ? (
+          <View style={styles.kindPicker} accessibilityRole="radiogroup">
+            {KINDS.map((k) => (
+              <Pressable
+                key={k}
+                style={[styles.kindOption, editorKind === k && styles.kindOptionActive]}
+                onPress={() => setKind(k)}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: editorKind === k }}
+                accessibilityLabel={k === 'standup' ? 'Stand-up' : 'Freeform'}
+              >
+                <Text
+                  style={[styles.kindOptionText, editorKind === k && styles.kindOptionTextActive]}
                 >
-                  <Text
-                    style={[styles.kindOptionText, editorKind === k && styles.kindOptionTextActive]}
-                  >
-                    {k === 'standup' ? 'Stand-up' : 'Freeform'}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          ) : null}
-          {/* Keyed on draftKey + kind + the explicit nav day — a
+                  {k === 'standup' ? 'Stand-up' : 'Freeform'}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
+        {/* Keyed on draftKey + kind + the explicit nav day — a
               successful create remounts the editor empty, a failed
               submit keeps the draft, and UTC rollover can't steal one
               (entryDay is still null, so the key doesn't move). */}
-          <DiaryEntryEditor
-            key={`new-${draftKey}-${editorKind}-${entryDay ?? 'pinned'}`}
-            kind={editorKind}
-            submitLabel={editorKind === 'standup' ? 'Save stand-up' : 'Add entry'}
-            busy={busy}
-            onSubmit={(patch) =>
-              createEntry.mutate({ kind: editorKind, entry_date: targetDay, ...patch })
-            }
-          />
-        </>
-      )}
+        <DiaryEntryEditor
+          key={`new-${draftKey}-${editorKind}-${entryDay ?? 'pinned'}`}
+          kind={editorKind}
+          submitLabel={editorKind === 'standup' ? 'Save stand-up' : 'Add entry'}
+          busy={busy}
+          onSubmit={(patch) =>
+            createEntry.mutate({ kind: editorKind, entry_date: targetDay, ...patch })
+          }
+        />
+      </>
     </View>
   );
 
@@ -252,7 +258,13 @@ export default function DiaryScreen() {
           refreshControl={
             <RefreshControl
               refreshing={entriesQuery.isRefetching}
-              onRefresh={() => void entriesQuery.refetch()}
+              onRefresh={() => {
+                // A refetch shifts page boundaries — drop accumulated
+                // pages so the new page 1 re-anchors the pagination.
+                setOlder([]);
+                setMoreLeft(null);
+                void entriesQuery.refetch();
+              }}
               tintColor={Colors.accent}
             />
           }
@@ -262,18 +274,23 @@ export default function DiaryScreen() {
             ) : undefined
           }
           ListFooterComponent={
-            hasMore ? (
-              <Pressable
-                style={styles.dayNavButton}
-                onPress={() => void loadMore()}
-                disabled={loadingMore}
-                accessibilityRole="button"
-                accessibilityLabel="Load older entries"
-              >
-                <Text style={styles.loadMoreText}>
-                  {loadingMore ? 'Loading…' : 'Load older entries'}
-                </Text>
-              </Pressable>
+            hasMore || loadError ? (
+              <View style={{ gap: Spacing.two }}>
+                {loadError ? <Text style={styles.error}>{loadError}</Text> : null}
+                {hasMore ? (
+                  <Pressable
+                    style={styles.dayNavButton}
+                    onPress={() => void loadMore()}
+                    disabled={loadingMore}
+                    accessibilityRole="button"
+                    accessibilityLabel="Load older entries"
+                  >
+                    <Text style={styles.loadMoreText}>
+                      {loadingMore ? 'Loading…' : 'Load older entries'}
+                    </Text>
+                  </Pressable>
+                ) : null}
+              </View>
             ) : undefined
           }
         />
