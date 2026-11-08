@@ -65,6 +65,7 @@ jest.mock('@/game/event-queue', () => ({
     flush: mockFlush,
     enqueue: mockEnqueue,
     deadLetterCount: () => 0,
+    pending: () => [],
   })),
 }));
 
@@ -133,7 +134,7 @@ describe('DailiesScreen', () => {
       fireEvent.press(screen.getByLabelText('Check Morning workout'));
     });
     await waitFor(() =>
-      expect(dailiesApi.check).toHaveBeenCalledWith(5, { done: true }, 'uuid-test'),
+      expect(dailiesApi.check).toHaveBeenCalledWith(5, { done: true }, 'mobile:uuid-test'),
     );
     expect(mockEnqueue).not.toHaveBeenCalled();
   });
@@ -154,7 +155,7 @@ describe('DailiesScreen', () => {
       expect(dailiesApi.check).toHaveBeenCalledWith(
         5,
         { daily_item_id: 11, done: true },
-        'uuid-test',
+        'mobile:uuid-test',
       ),
     );
   });
@@ -175,7 +176,7 @@ describe('DailiesScreen', () => {
       expect(dailiesApi.check).toHaveBeenCalledWith(
         5,
         { daily_item_id: 12, done: false },
-        'uuid-test',
+        'mobile:uuid-test',
       ),
     );
   });
@@ -189,11 +190,15 @@ describe('DailiesScreen', () => {
       fireEvent.press(screen.getByLabelText('Check Warm up'));
     });
     await waitFor(() =>
-      expect(mockEnqueue).toHaveBeenCalledWith('daily_check', {
-        daily_id: 5,
-        daily_item_id: 11,
-        done: true,
-      }),
+      expect(mockEnqueue).toHaveBeenCalledWith(
+        'daily_check',
+        {
+          daily_id: 5,
+          daily_item_id: 11,
+          done: true,
+        },
+        'mobile:uuid-test',
+      ),
     );
     expect(mockFlush).toHaveBeenCalled();
   });

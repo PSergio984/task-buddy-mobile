@@ -24,13 +24,13 @@ import {
 } from 'react-native';
 
 import type { Daily, DailyInput, Recurrence, SessionDifficulty } from '@/api/types';
+import { ChipGroup } from '@/components/chip-group';
+import { WEEKDAY_SHORT } from '@/components/game-utils';
 import { Colors, Spacing } from '@/constants/colors';
 
 /** Mirrors the backend's DailyIn bounds (title/items title ≤200, items ≤30). */
 const TITLE_MAX = 200;
 const ITEMS_MAX = 30;
-
-const WEEKDAY_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 const DIFFICULTY_OPTIONS: { value: SessionDifficulty; label: string }[] = [
   { value: 'trivial', label: 'Trivial' },
@@ -55,34 +55,6 @@ function parseItemLines(text: string): { title: string }[] {
     .map((line) => line.trim())
     .filter((line) => line !== '')
     .map((title) => ({ title }));
-}
-
-function ChipGroup<T extends string | number>({
-  options,
-  selected,
-  onSelect,
-}: {
-  options: { value: T; label: string }[];
-  selected: T;
-  onSelect: (value: T) => void;
-}) {
-  return (
-    <View style={styles.chipRow}>
-      {options.map((o) => (
-        <Pressable
-          key={String(o.value)}
-          accessibilityRole="button"
-          accessibilityState={{ selected: selected === o.value }}
-          style={[styles.chip, selected === o.value && styles.chipSelected]}
-          onPress={() => onSelect(o.value)}
-        >
-          <Text style={[styles.chipText, selected === o.value && styles.chipTextSelected]}>
-            {o.label}
-          </Text>
-        </Pressable>
-      ))}
-    </View>
-  );
 }
 
 interface DailyEditorProps {

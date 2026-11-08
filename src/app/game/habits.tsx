@@ -24,18 +24,12 @@ import {
 import { useAuth } from '@/api/auth';
 import { ApiError } from '@/api/client';
 import { habitsApi } from '@/api/game';
-import type { Habit, HabitClickDirection, HabitInput } from '@/api/types';
+import type { Habit, HabitClickDirection, HabitClickResponse, HabitInput } from '@/api/types';
 import { HabitEditor } from '@/components/habits/habit-editor';
 import { HabitRow } from '@/components/habits/habit-row';
+import { toggled } from '@/components/game-utils';
 import { Colors, Spacing } from '@/constants/colors';
 import { createEventQueue } from '@/game/event-queue';
-
-function toggled(set: ReadonlySet<number>, id: number, on: boolean): ReadonlySet<number> {
-  const next = new Set(set);
-  if (on) next.add(id);
-  else next.delete(id);
-  return next;
-}
 
 export default function HabitsScreen() {
   const { token } = useAuth();
@@ -47,6 +41,8 @@ export default function HabitsScreen() {
   /** Rows with a click parked in the offline queue — shown as pending-sync. */
   const [queuedIds, setQueuedIds] = useState<ReadonlySet<number>>(new Set());
   const [actionError, setActionError] = useState<string | null>(null);
+  /** Queued clicks rejected past MAX_FLUSH_ATTEMPTS — an honest loss. */
+  const [deadLetters, setDeadLetters] = useState(0);
 
   const {
     data: habits,
@@ -60,11 +56,42 @@ export default function HabitsScreen() {
     enabled: !!token,
   });
 
+  /** Queued badges derive from the queue's persisted contents — they
+   *  rehydrate on remount and survive a partial flush. */
+  const refreshQueued = () =>
+    setQueuedIds(
+      new Set(
+        queue
+          .pending()
+          .filter((e) => e.type === 'habit_click')
+          .map((e) => Number(e.payload.habit_id))
+          .filter(Number.isFinite),
+      ),
+    );
+
+  /** The click response carries fresh habit+profile — fold it; the
+   *  ledger-derived views (timeline, activity, achievements) still refetch. */
+  const foldScore = (res: HabitClickResponse) => {
+    queryClient.setQueryData<Habit[]>(['habits'], (list) =>
+      list?.map((h) => (h.id === res.habit.id ? res.habit : h)),
+    );
+    queryClient.setQueryData(['game-profile'], res.profile);
+    for (const key of ['timeline', 'activity-grid', 'activity-stats', 'achievements']) {
+      void queryClient.invalidateQueries({ queryKey: [key] });
+    }
+  };
+  /** Offline replays carry no fresh rows — refetch everything scored. */
   const invalidateAfterScore = () => {
-    void queryClient.invalidateQueries({ queryKey: ['habits'] });
-    void queryClient.invalidateQueries({ queryKey: ['game-profile'] });
-    // A click lands a habit_click ledger row — the timeline feed needs it too.
-    void queryClient.invalidateQueries({ queryKey: ['game-events'] });
+    for (const key of [
+      'habits',
+      'game-profile',
+      'timeline',
+      'activity-grid',
+      'activity-stats',
+      'achievements',
+    ]) {
+      void queryClient.invalidateQueries({ queryKey: [key] });
+    }
   };
 
   // Deliver clicks queued by an earlier session (or an earlier visit here).
@@ -73,10 +100,9 @@ export default function HabitsScreen() {
       .hydrate()
       .then(() => queue.flush())
       .then((r) => {
-        if (r.sent > 0) {
-          setQueuedIds(new Set());
-          invalidateAfterScore();
-        }
+        setDeadLetters(queue.deadLetterCount());
+        refreshQueued();
+        if (r.sent > 0) invalidateAfterScore();
       })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps -- queue is a stable singleton
@@ -105,22 +131,24 @@ export default function HabitsScreen() {
     if (clickingIds.has(habit.id)) return;
     setActionError(null);
     setClickingIds((s) => toggled(s, habit.id, true));
+    // One id both ways: if the POST lands but its response dies in transit
+    // (the real status-0 case), the queued replay carries the SAME dedupe
+    // key — the server returns 'duplicate' instead of double-scoring.
+    const eid = `mobile:${Crypto.randomUUID()}`;
     try {
-      await habitsApi.click(habit.id, direction, Crypto.randomUUID());
-      setQueuedIds((s) => toggled(s, habit.id, false));
-      invalidateAfterScore();
+      const res = await habitsApi.click(habit.id, direction, eid);
+      foldScore(res);
     } catch (e) {
       if (e instanceof ApiError && e.status === 0) {
         // Network unreachable — park the gesture on the offline queue and
         // try to flush; the row shows pending-sync until delivery lands.
         try {
-          await queue.enqueue('habit_click', { habit_id: habit.id, direction });
-          setQueuedIds((s) => toggled(s, habit.id, true));
+          await queue.enqueue('habit_click', { habit_id: habit.id, direction }, eid);
+          refreshQueued();
           const res = await queue.flush();
-          if (!res.failed) {
-            setQueuedIds((s) => toggled(s, habit.id, false));
-            invalidateAfterScore();
-          }
+          setDeadLetters(queue.deadLetterCount());
+          refreshQueued();
+          if (res.sent > 0) invalidateAfterScore();
         } catch {
           setActionError('Could not queue the click — it was not recorded.');
         }
@@ -163,6 +191,12 @@ export default function HabitsScreen() {
         <Text style={styles.newButtonText}>New habit</Text>
       </Pressable>
       {actionError ? <Text style={styles.errorText}>{actionError}</Text> : null}
+      {deadLetters > 0 ? (
+        <Text style={styles.errorText}>
+          {deadLetters} queued {deadLetters === 1 ? 'action was' : 'actions were'} rejected and
+          dropped.
+        </Text>
+      ) : null}
       {mutationError ? <Text style={styles.errorText}>{mutationError.message}</Text> : null}
     </View>
   );

@@ -7,6 +7,7 @@ import { SymbolView } from 'expo-symbols';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { Habit, HabitClickDirection } from '@/api/types';
+import { reminderLabel } from '@/components/game-utils';
 import { Colors, Spacing } from '@/constants/colors';
 
 type HabitDrift = 'fresh' | 'steady' | 'farmed';
@@ -30,12 +31,6 @@ function counterLabel(counter: number): string {
   if (counter > 0) return `+${counter}`;
   if (counter < 0) return `−${Math.abs(counter)}`;
   return '0';
-}
-
-/** Up to two reminder times shown, then a "+n" remainder. */
-function reminderLabel(times: string[]): string {
-  if (times.length <= 2) return times.join(' · ');
-  return `${times.slice(0, 2).join(' · ')} +${times.length - 2}`;
 }
 
 function directionAllows(habit: Habit, direction: HabitClickDirection): boolean {

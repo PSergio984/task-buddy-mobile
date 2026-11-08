@@ -3,10 +3,12 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
+import { AppState } from 'react-native';
 
 import { hydrateAuth, useAuth } from '@/api/auth';
 import { ApiError } from '@/api/client';
 import { Colors } from '@/constants/colors';
+import { createEventQueue } from '@/game/event-queue';
 
 void SplashScreen.preventAutoHideAsync();
 
@@ -28,6 +30,25 @@ export default function RootLayout() {
   useEffect(() => {
     hydrateAuth().finally(() => void SplashScreen.hideAsync());
   }, []);
+
+  // Offline gestures (habit clicks, daily checks, phone-down evidence)
+  // only flush when a consumer screen mounts — a reconnect while the app
+  // sits on an unrelated screen would leave them parked. Foregrounding
+  // is the natural delivery point; gated on token so a flush never posts
+  // unauthenticated.
+  useEffect(() => {
+    if (!token) return;
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        const queue = createEventQueue();
+        void queue
+          .hydrate()
+          .then(() => queue.flush())
+          .catch(() => {});
+      }
+    });
+    return () => sub.remove();
+  }, [token]);
 
   // Auth gate: no stored token → /login; token on /login → tasks.
   useEffect(() => {

@@ -21,7 +21,7 @@ type SymbolName = SymbolViewProps['name'];
 const SLOT_ICONS: Record<string, SymbolName> = {
   weapon: { ios: 'figure.fencing', android: 'swords', web: 'swords' },
   shield: { ios: 'shield.fill', android: 'shield', web: 'shield' },
-  head: { ios: 'crown.fill', android: 'crown', web: 'crown' },
+  head: { ios: 'crown', android: 'crown', web: 'crown' },
   armor: { ios: 'shield.lefthalf.filled', android: 'health_and_safety', web: 'health_and_safety' },
   body: { ios: 'tshirt.fill', android: 'checkroom', web: 'checkroom' },
   back: { ios: 'backpack.fill', android: 'backpack', web: 'backpack' },
@@ -48,7 +48,7 @@ const FALLBACK_POSITION = { x: 0.5, y: 0.96 };
 /** Tier tint: iron → stone, steel+ → amber (web slate/amber scale). */
 function tierTint(tier: number): string {
   if (tier <= 1) return '#A8A29E';
-  if (tier === 2) return '#FBBF24';
+  if (tier === 2) return Colors.gold;
   return '#FCD34D';
 }
 
@@ -141,7 +141,7 @@ export function GameAvatar({ config, size = 48, items = [] }: GameAvatarProps) {
           />
         ) : (
           <Text style={[styles.initial, { fontSize: Math.round(size * 0.4) }]}>
-            {seed[0].toUpperCase()}
+            {([...seed][0] ?? 'U').toUpperCase()}
           </Text>
         )}
       </View>
@@ -168,6 +168,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.2)',
-    backgroundColor: 'rgba(15,23,42,0.8)',
+    backgroundColor: `${Colors.background}CC`,
   },
 });

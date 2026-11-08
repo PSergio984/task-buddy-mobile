@@ -89,9 +89,9 @@ export function ContributionGrid({ grid }: { grid: ActivityGrid }) {
                       { backgroundColor: tierColor(day.tier) },
                       selected?.date === day.date && styles.cellSelected,
                     ]}
-                    // Small cells stay grid-shaped; the slop keeps each one
-                    // a ~44px touch target.
-                    hitSlop={15}
+                    // ~34px effective target — the most a dense grid can
+                    // give before neighbors' touch areas overlap.
+                    hitSlop={10}
                     accessibilityRole="button"
                     accessibilityLabel={`${utcDayLabel(day.date)}: ${Math.round(
                       day.score,

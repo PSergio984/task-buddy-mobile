@@ -40,7 +40,7 @@ export function AchievementsPanel({ achievements }: AchievementsPanelProps) {
               <View style={[styles.iconBadge, earned && styles.iconBadgeEarned]}>
                 <SymbolView
                   name={earned ? EARNED_ICON : LOCKED_ICON}
-                  tintColor={earned ? '#FBBF24' : Colors.textMuted}
+                  tintColor={earned ? Colors.gold : Colors.textMuted}
                   size={18}
                 />
               </View>
@@ -94,7 +94,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: Spacing.three,
   },
-  rowEarned: { borderColor: 'rgba(251,191,36,0.2)', backgroundColor: 'rgba(251,191,36,0.05)' },
+  rowEarned: {
+    borderColor: `${Colors.gold}33`,
+    backgroundColor: `${Colors.gold}0D`,
+  },
   rowLocked: { borderColor: Colors.border, backgroundColor: Colors.background, opacity: 0.6 },
   iconBadge: {
     width: 36,
@@ -105,13 +108,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  iconBadgeEarned: { borderColor: 'rgba(251,191,36,0.3)', backgroundColor: 'rgba(251,191,36,0.1)' },
+  iconBadgeEarned: {
+    borderColor: `${Colors.gold}4D`,
+    backgroundColor: `${Colors.gold}1A`,
+  },
   rowText: { flex: 1, gap: 2, minWidth: 0 },
   name: { color: Colors.text, fontSize: 14, fontWeight: '700' },
   description: { color: Colors.textSecondary, fontSize: 12 },
   reward: { alignItems: 'flex-end', gap: 2 },
   gold: {
-    color: '#FBBF24',
+    color: Colors.gold,
     fontSize: 10,
     fontWeight: '900',
     textTransform: 'uppercase',

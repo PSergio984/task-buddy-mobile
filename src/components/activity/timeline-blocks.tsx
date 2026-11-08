@@ -8,9 +8,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import type { TimelineMarker, TimelineSessionBlock } from '@/api/types';
 import { Colors, Spacing } from '@/constants/colors';
 
-import { utcTimeLabel } from './dates';
-
-const DAY_MS = 86_400_000;
+import { DAY_MS, utcTimeLabel } from './dates';
 
 /** "session_started" → "Session started". */
 export function markerLabel(type: string): string {
@@ -47,7 +45,7 @@ function durationLabel(seconds: number): string {
 }
 
 /** End label — a block running over UTC midnight gets a "+Nd" suffix. */
-function endLabel(endIso: string | null, dayStartMs: number, dayEndMs: number): string {
+export function endLabel(endIso: string | null, dayStartMs: number, dayEndMs: number): string {
   if (endIso === null) return 'running';
   const label = utcTimeLabel(endIso);
   const endMs = Date.parse(endIso);

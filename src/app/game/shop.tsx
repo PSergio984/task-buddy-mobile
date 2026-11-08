@@ -161,6 +161,6 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 2,
   },
-  goldText: { color: '#FBBF24', fontSize: 16, fontWeight: '900' },
+  goldText: { color: Colors.gold, fontSize: 16, fontWeight: '900' },
   errorText: { color: Colors.danger, fontSize: 13 },
 });

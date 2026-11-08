@@ -162,6 +162,13 @@ export default function ProfileScreen() {
   }
 
   const levelLine = `Lv ${profile.level}${profile.game_class ? ` · ${profile.game_class}` : ''}`;
+  const mutationError =
+    allocate.error ??
+    updateCharacter.error ??
+    selectClass.error ??
+    respec.error ??
+    updateAvatar.error ??
+    updateRetention.error;
 
   return (
     <ScrollView
@@ -170,6 +177,10 @@ export default function ProfileScreen() {
       keyboardShouldPersistTaps="handled"
     >
       <Stack.Screen options={{ title: 'Profile' }} />
+
+      {mutationError instanceof Error ? (
+        <Text style={styles.errorText}>{mutationError.message}</Text>
+      ) : null}
 
       <View style={styles.card}>
         <View style={styles.headerRow}>
@@ -183,7 +194,7 @@ export default function ProfileScreen() {
         {profile.hp <= 0 ? (
           <Text style={styles.deadText}>You died — losable gear was dropped</Text>
         ) : null}
-        <StatBar label="XP" current={profile.xp} max={profile.xp_to_next_level} color="#38BDF8" />
+        <StatBar label="XP" current={profile.xp} max={profile.xp_to_next_level} color={Colors.xp} />
       </View>
 
       <StatsPanel
@@ -291,7 +302,8 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
-  goldText: { color: '#FBBF24', fontSize: 16, fontWeight: '900' },
+  goldText: { color: Colors.gold, fontSize: 16, fontWeight: '900' },
+  errorText: { color: Colors.danger, fontSize: 13 },
   deadText: {
     color: Colors.danger,
     fontSize: 10,

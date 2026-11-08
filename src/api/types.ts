@@ -416,11 +416,8 @@ export interface DailyInput {
   active?: boolean;
 }
 
-/** `active` is engine-owned on create — splitting it out keeps the PATCH
- *  contract honest about which writes can pause/resume a daily. */
-export type DailyPatch = Partial<Omit<DailyInput, 'active'>> & {
-  active?: boolean;
-};
+/** PATCH may toggle `active` — pause/resume — while create can't. */
+export type DailyPatch = Partial<DailyInput>;
 
 export interface DailyCheckInput {
   /** Omit to check the whole daily (pays the items' remaining share). */

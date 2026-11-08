@@ -64,6 +64,7 @@ jest.mock('@/game/event-queue', () => ({
     flush: mockFlush,
     enqueue: mockEnqueue,
     deadLetterCount: () => 0,
+    pending: () => [],
   })),
 }));
 
@@ -143,7 +144,9 @@ describe('HabitsScreen', () => {
     await act(async () => {
       fireEvent.press(screen.getByLabelText('+click Read pages'));
     });
-    await waitFor(() => expect(habitsApi.click).toHaveBeenCalledWith(1, 'positive', 'uuid-test'));
+    await waitFor(() =>
+      expect(habitsApi.click).toHaveBeenCalledWith(1, 'positive', 'mobile:uuid-test'),
+    );
     expect(mockEnqueue).not.toHaveBeenCalled();
   });
 
@@ -156,10 +159,14 @@ describe('HabitsScreen', () => {
       fireEvent.press(screen.getByLabelText('+click Read pages'));
     });
     await waitFor(() =>
-      expect(mockEnqueue).toHaveBeenCalledWith('habit_click', {
-        habit_id: 1,
-        direction: 'positive',
-      }),
+      expect(mockEnqueue).toHaveBeenCalledWith(
+        'habit_click',
+        {
+          habit_id: 1,
+          direction: 'positive',
+        },
+        'mobile:uuid-test',
+      ),
     );
     expect(mockFlush).toHaveBeenCalled();
   });

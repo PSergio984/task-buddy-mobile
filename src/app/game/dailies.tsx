@@ -28,18 +28,12 @@ import {
 import { useAuth } from '@/api/auth';
 import { ApiError } from '@/api/client';
 import { dailiesApi } from '@/api/game';
-import type { Daily, DailyCheckInput, DailyInput } from '@/api/types';
+import type { Daily, DailyCheckInput, DailyCheckResponse, DailyInput } from '@/api/types';
 import { DailyEditor } from '@/components/dailies/daily-editor';
 import { DailyRow } from '@/components/dailies/daily-row';
+import { toggled } from '@/components/game-utils';
 import { Colors, Spacing } from '@/constants/colors';
 import { createEventQueue } from '@/game/event-queue';
-
-function toggled(set: ReadonlySet<number>, id: number, on: boolean): ReadonlySet<number> {
-  const next = new Set(set);
-  if (on) next.add(id);
-  else next.delete(id);
-  return next;
-}
 
 export default function DailiesScreen() {
   const { token } = useAuth();
@@ -51,6 +45,8 @@ export default function DailiesScreen() {
   /** Rows with a check parked in the offline queue — shown as pending-sync. */
   const [queuedIds, setQueuedIds] = useState<ReadonlySet<number>>(new Set());
   const [actionError, setActionError] = useState<string | null>(null);
+  /** Queued checks rejected past MAX_FLUSH_ATTEMPTS — an honest loss. */
+  const [deadLetters, setDeadLetters] = useState(0);
 
   const {
     data: dailies,
@@ -64,11 +60,42 @@ export default function DailiesScreen() {
     enabled: !!token,
   });
 
+  /** Queued badges derive from the queue's persisted contents — they
+   *  rehydrate on remount and survive a partial flush. */
+  const refreshQueued = () =>
+    setQueuedIds(
+      new Set(
+        queue
+          .pending()
+          .filter((e) => e.type === 'daily_check')
+          .map((e) => Number(e.payload.daily_id))
+          .filter(Number.isFinite),
+      ),
+    );
+
+  /** The check response carries fresh daily+profile — fold it; the
+   *  ledger-derived views (timeline, activity, achievements) still refetch. */
+  const foldScore = (res: DailyCheckResponse) => {
+    queryClient.setQueryData<Daily[]>(['dailies'], (list) =>
+      list?.map((d) => (d.id === res.daily.id ? res.daily : d)),
+    );
+    queryClient.setQueryData(['game-profile'], res.profile);
+    for (const key of ['timeline', 'activity-grid', 'activity-stats', 'achievements']) {
+      void queryClient.invalidateQueries({ queryKey: [key] });
+    }
+  };
+  /** Offline replays carry no fresh rows — refetch everything scored. */
   const invalidateAfterScore = () => {
-    void queryClient.invalidateQueries({ queryKey: ['dailies'] });
-    void queryClient.invalidateQueries({ queryKey: ['game-profile'] });
-    // A check lands a daily_check ledger row — the timeline feed needs it too.
-    void queryClient.invalidateQueries({ queryKey: ['game-events'] });
+    for (const key of [
+      'dailies',
+      'game-profile',
+      'timeline',
+      'activity-grid',
+      'activity-stats',
+      'achievements',
+    ]) {
+      void queryClient.invalidateQueries({ queryKey: [key] });
+    }
   };
 
   // Deliver checks queued by an earlier session (or an earlier visit here).
@@ -77,10 +104,9 @@ export default function DailiesScreen() {
       .hydrate()
       .then(() => queue.flush())
       .then((r) => {
-        if (r.sent > 0) {
-          setQueuedIds(new Set());
-          invalidateAfterScore();
-        }
+        setDeadLetters(queue.deadLetterCount());
+        refreshQueued();
+        if (r.sent > 0) invalidateAfterScore();
       })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps -- queue is a stable singleton
@@ -122,26 +148,31 @@ export default function DailiesScreen() {
     if (checkingIds.has(daily.id)) return;
     setActionError(null);
     setCheckingIds((s) => toggled(s, daily.id, true));
+    // One id both ways — see the header in habits.tsx (same dedupe key on
+    // the REST call and its queued replay).
+    const eid = `mobile:${Crypto.randomUUID()}`;
     try {
-      await dailiesApi.check(daily.id, input, Crypto.randomUUID());
-      setQueuedIds((s) => toggled(s, daily.id, false));
-      invalidateAfterScore();
+      const res = await dailiesApi.check(daily.id, input, eid);
+      foldScore(res);
     } catch (e) {
       if (e instanceof ApiError && e.status === 0) {
         // Network unreachable — park the gesture on the offline queue and
         // try to flush; the row shows pending-sync until delivery lands.
         try {
-          await queue.enqueue('daily_check', {
-            daily_id: daily.id,
-            daily_item_id: input.daily_item_id ?? null,
-            done: input.done ?? true,
-          });
-          setQueuedIds((s) => toggled(s, daily.id, true));
+          await queue.enqueue(
+            'daily_check',
+            {
+              daily_id: daily.id,
+              daily_item_id: input.daily_item_id ?? null,
+              done: input.done ?? true,
+            },
+            eid,
+          );
+          refreshQueued();
           const res = await queue.flush();
-          if (!res.failed) {
-            setQueuedIds((s) => toggled(s, daily.id, false));
-            invalidateAfterScore();
-          }
+          setDeadLetters(queue.deadLetterCount());
+          refreshQueued();
+          if (res.sent > 0) invalidateAfterScore();
         } catch {
           setActionError('Could not queue the check — it was not recorded.');
         }
@@ -188,6 +219,12 @@ export default function DailiesScreen() {
         <Text style={styles.newButtonText}>New daily</Text>
       </Pressable>
       {actionError ? <Text style={styles.errorText}>{actionError}</Text> : null}
+      {deadLetters > 0 ? (
+        <Text style={styles.errorText}>
+          {deadLetters} queued {deadLetters === 1 ? 'action was' : 'actions were'} rejected and
+          dropped.
+        </Text>
+      ) : null}
       {mutationError ? <Text style={styles.errorText}>{mutationError.message}</Text> : null}
     </View>
   );

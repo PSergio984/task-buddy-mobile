@@ -15,6 +15,7 @@ jest.mock('@/api/auth', () => ({
 
 jest.mock('@/api/game', () => ({
   timelineApi: { day: jest.fn() },
+  gameApi: { getProfile: jest.fn().mockResolvedValue({ retention: 'forever' }) },
 }));
 
 jest.mock('expo-router', () => ({

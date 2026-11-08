@@ -99,6 +99,7 @@ describe('DiaryScreen', () => {
     await waitFor(() =>
       expect(diaryApi.create).toHaveBeenCalledWith({
         kind: 'freeform',
+        entry_date: new Date().toISOString().slice(0, 10),
         freeform: 'My new note',
       }),
     );

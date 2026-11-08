@@ -4,17 +4,31 @@
  */
 import { useQuery } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { useAuth } from '@/api/auth';
-import { timelineApi } from '@/api/game';
-import { addUtcDays, todayUtcDay, utcDayLabel, type UtcDay } from '@/components/activity/dates';
+import { gameApi, timelineApi } from '@/api/game';
+import {
+  addUtcDays,
+  DAY_MS,
+  todayUtcDay,
+  utcDayLabel,
+  type UtcDay,
+} from '@/components/activity/dates';
 import { MarkerRow, SessionBlockCard } from '@/components/activity/timeline-blocks';
 import { DiaryEntryCard } from '@/components/diary/entry-card';
 import { Colors, Spacing } from '@/constants/colors';
 
-function DayNavigator({ day, onChange }: { day: UtcDay; onChange: (day: UtcDay) => void }) {
+function DayNavigator({
+  day,
+  today,
+  onChange,
+}: {
+  day: UtcDay;
+  today: UtcDay;
+  onChange: (day: UtcDay) => void;
+}) {
   return (
     <View style={styles.nav}>
       <Pressable
@@ -34,10 +48,10 @@ function DayNavigator({ day, onChange }: { day: UtcDay; onChange: (day: UtcDay) 
       >
         <Text style={styles.navButtonText}>›</Text>
       </Pressable>
-      {day !== todayUtcDay() ? (
+      {day !== today ? (
         <Pressable
           style={styles.todayButton}
-          onPress={() => onChange(todayUtcDay())}
+          onPress={() => onChange(today)}
           accessibilityRole="button"
           accessibilityLabel="Jump to today"
         >
@@ -48,12 +62,30 @@ function DayNavigator({ day, onChange }: { day: UtcDay; onChange: (day: UtcDay) 
   );
 }
 
+/** Diary-retention preference → the horizon past which rows are hidden. */
+const RETENTION_DAYS: Record<string, number> = { '90d': 90, '1y': 365 };
+
 export default function TimelineScreen() {
   const { token } = useAuth();
   const [day, setDay] = useState<UtcDay>(todayUtcDay);
+  // UTC rollover — the Today chip and empty state must not freeze at mount.
+  const [today, setToday] = useState<UtcDay>(todayUtcDay);
+  useEffect(() => {
+    const id = setInterval(() => {
+      const now = todayUtcDay();
+      setToday((d) => (d === now ? d : now));
+    }, 60_000);
+    return () => clearInterval(id);
+  }, []);
   const timeline = useQuery({
     queryKey: ['timeline', day],
     queryFn: () => timelineApi.day(day),
+    enabled: !!token,
+  });
+  // The retention window lives on the profile — already warm from the hub.
+  const profile = useQuery({
+    queryKey: ['game-profile'],
+    queryFn: gameApi.getProfile,
     enabled: !!token,
   });
 
@@ -64,22 +96,40 @@ export default function TimelineScreen() {
     data.sessions.length === 0 &&
     data.markers.length === 0 &&
     data.diary.length === 0;
+  const horizonDays = profile.data ? (RETENTION_DAYS[profile.data.retention] ?? null) : null;
+  // Past the retention horizon an empty day means "hidden", not "nothing".
+  // `today` (the rollover-refreshed state day) stands in for wall time —
+  // calling Date.now() in render would trip the purity rule.
+  const beyondRetention =
+    horizonDays !== null && Date.parse(`${today}T00:00:00Z`) - dayStartMs > horizonDays * DAY_MS;
 
   return (
     <>
       <Stack.Screen options={{ title: 'Timeline' }} />
       <ScrollView style={styles.root} contentContainerStyle={styles.content}>
-        <DayNavigator day={day} onChange={setDay} />
+        <DayNavigator day={day} today={today} onChange={setDay} />
 
         {timeline.isPending ? (
           <ActivityIndicator color={Colors.accent} />
         ) : timeline.isError ? (
-          <Text style={styles.error}>Couldn’t load this day’s timeline.</Text>
+          <View style={styles.section}>
+            <Text style={styles.error}>Couldn’t load this day’s timeline.</Text>
+            <Pressable
+              style={styles.navButton}
+              onPress={() => void timeline.refetch()}
+              accessibilityRole="button"
+              accessibilityLabel="Retry"
+            >
+              <Text style={styles.todayText}>Retry</Text>
+            </Pressable>
+          </View>
         ) : data !== undefined ? (
           <>
             {empty ? (
               <Text style={styles.empty}>
-                Nothing scored this day — run a focus session or click a habit.
+                {beyondRetention
+                  ? `This day is beyond your ${profile.data?.retention} retention window — its records are hidden.`
+                  : 'Nothing scored this day — run a focus session or click a habit.'}
               </Text>
             ) : null}
 

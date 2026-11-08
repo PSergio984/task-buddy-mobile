@@ -156,7 +156,7 @@ export function EquipmentPanel({
                         the field actually ships. */}
                     {item.owned && item.costume !== undefined ? (
                       <Pressable
-                        accessibilityRole="button"
+                        accessibilityRole="togglebutton"
                         accessibilityLabel={`Use ${item.name} as costume`}
                         accessibilityState={{ selected: costumeOn, disabled: pending }}
                         style={[
@@ -214,8 +214,8 @@ const styles = StyleSheet.create({
     padding: Spacing.three,
   },
   itemRowEquipped: {
-    borderColor: 'rgba(194,163,136,0.3)',
-    backgroundColor: 'rgba(194,163,136,0.08)',
+    borderColor: `${Colors.accent}4D`,
+    backgroundColor: `${Colors.accent}14`,
   },
   itemText: { flex: 1, gap: 4, minWidth: 0 },
   itemTitleRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
@@ -234,7 +234,10 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
-  badgeDanger: { borderColor: 'rgba(248,113,113,0.3)', backgroundColor: 'rgba(248,113,113,0.1)' },
+  badgeDanger: {
+    borderColor: `${Colors.danger}4D`,
+    backgroundColor: `${Colors.danger}1A`,
+  },
   badgeDangerText: { color: Colors.danger },
   itemMeta: {
     color: Colors.textMuted,
@@ -243,7 +246,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
-  hintText: { color: '#FBBF24' },
+  hintText: { color: Colors.gold },
   actions: { flexDirection: 'row', gap: Spacing.two },
   actionButton: {
     borderRadius: 10,

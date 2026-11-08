@@ -55,6 +55,10 @@ const DEFAULT_KEY = 'task-buddy.game-event-queue';
  *  device can't flush the previous account's unposted evidence under its
  *  own identity (the server attributes ledger rows to the bearer token). */
 export async function purgeEventQueueStorage(): Promise<void> {
+  // The shared instance's in-memory copy survives a disk-only purge —
+  // mounted screens still hold the reference, so abandon it outright.
+  shared?.abandon();
+  shared = null;
   // Same lazy require as createEventQueue — the native module throws at
   // import time under jest.
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -98,6 +102,9 @@ export class EventQueue {
 
   private events: QueuedEvent[] = [];
   private deadLetters = 0;
+  /** Set by purgeEventQueueStorage — mounted screens holding a stale
+   *  reference can neither flush nor re-persist the old account's queue. */
+  private abandoned = false;
   /** Memoized first-read: concurrent hydrate()/enqueue()/flush() callers
    *  join the same in-flight load instead of racing ahead on an empty
    *  queue and clobbering events that were still being restored. */
@@ -179,14 +186,33 @@ export class EventQueue {
     await this.storage.setItem(this.deadKey(), String(this.deadLetters));
   }
 
-  /** Queue one event for the next flush. Id assigned via expo-crypto UUID. */
-  async enqueue(type: string, payload: Record<string, unknown>): Promise<QueuedEvent> {
+  /** Drop the in-memory copy and bar further use — a mounted screen's
+   *  stale reference must not flush or re-persist after logout. */
+  abandon(): void {
+    this.abandoned = true;
+    this.events = [];
+  }
+
+  /** Pending events, post-hydrate — screens derive queued badges from these. */
+  pending(): readonly QueuedEvent[] {
+    return this.events;
+  }
+
+  /** Queue one event for the next flush. Id assigned via expo-crypto UUID
+   *  unless the caller supplies one — a REST-fallback event reuses the id
+   *  its lost request already sent so the server dedupe key survives. */
+  async enqueue(
+    type: string,
+    payload: Record<string, unknown>,
+    clientEventId?: string,
+  ): Promise<QueuedEvent> {
     // A transient storage fault gets one immediate retry — evidence must not
     // die on a momentary read failure (a durable failure still rejects and is
     // counted by the caller's drop counter, not swallowed silently).
     await this.hydrate().catch(() => this.hydrate());
+    if (this.abandoned) throw new Error('event queue abandoned');
     const event: QueuedEvent = {
-      client_event_id: `mobile:${this.createId()}`,
+      client_event_id: clientEventId ?? `mobile:${this.createId()}`,
       type,
       client_ts: new Date(this.now()).toISOString(),
       payload,
@@ -219,6 +245,9 @@ export class EventQueue {
 
   private async doFlush(): Promise<FlushResult> {
     await this.hydrate();
+    if (this.abandoned) {
+      return { sent: 0, pending: 0, dropped: 0, failed: false };
+    }
     const result: FlushResult = {
       sent: 0,
       pending: this.events.length,
@@ -282,12 +311,22 @@ export class EventQueue {
   }
 }
 
-/** Default app queue — AsyncStorage-backed, posts through gameApi. */
+/** Default app queue — AsyncStorage-backed, posts through gameApi. One
+ *  instance per app: separate queues over the same storage key race
+ *  persist() writes and clobber each other's in-memory events. */
+let shared: EventQueue | null = null;
+
 export function createEventQueue(): EventQueue {
-  // Lazy require: the native AsyncStorage module throws at import time under
-  // jest, and the pure EventQueue must stay loadable for tests/injection.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const AsyncStorage = require('@react-native-async-storage/async-storage')
-    .default as KeyValueStorage;
-  return new EventQueue({ storage: AsyncStorage, post: (events) => gameApi.postEvents(events) });
+  if (!shared) {
+    // Lazy require: the native AsyncStorage module throws at import time under
+    // jest, and the pure EventQueue must stay loadable for tests/injection.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const AsyncStorage = require('@react-native-async-storage/async-storage')
+      .default as KeyValueStorage;
+    shared = new EventQueue({
+      storage: AsyncStorage,
+      post: (events) => gameApi.postEvents(events),
+    });
+  }
+  return shared;
 }

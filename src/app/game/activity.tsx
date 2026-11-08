@@ -4,7 +4,7 @@
  */
 import { useQuery } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
-import { ActivityIndicator, ScrollView, StyleSheet, Text } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { useAuth } from '@/api/auth';
 import { activityApi } from '@/api/game';
@@ -32,7 +32,17 @@ export default function ActivityScreen() {
         {stats.data !== undefined ? (
           <ActivityStatsPanel stats={stats.data} />
         ) : stats.isError ? (
-          <Text style={styles.error}>Couldn’t load your activity stats.</Text>
+          <View style={styles.errorWrap}>
+            <Text style={styles.error}>Couldn’t load your activity stats.</Text>
+            <Pressable
+              style={styles.retryButton}
+              onPress={() => void stats.refetch()}
+              accessibilityRole="button"
+              accessibilityLabel="Retry stats"
+            >
+              <Text style={styles.retryText}>Retry</Text>
+            </Pressable>
+          </View>
         ) : (
           <ActivityIndicator color={Colors.accent} />
         )}
@@ -40,7 +50,17 @@ export default function ActivityScreen() {
         {grid.data !== undefined ? (
           <ContributionGrid grid={grid.data} />
         ) : grid.isError ? (
-          <Text style={styles.error}>Couldn’t load the activity grid.</Text>
+          <View style={styles.errorWrap}>
+            <Text style={styles.error}>Couldn’t load the activity grid.</Text>
+            <Pressable
+              style={styles.retryButton}
+              onPress={() => void grid.refetch()}
+              accessibilityRole="button"
+              accessibilityLabel="Retry grid"
+            >
+              <Text style={styles.retryText}>Retry</Text>
+            </Pressable>
+          </View>
         ) : (
           <ActivityIndicator color={Colors.accent} />
         )}
@@ -53,4 +73,19 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.background },
   content: { padding: Spacing.four, gap: Spacing.four },
   error: { color: Colors.textSecondary, fontSize: 14, textAlign: 'center' },
+  errorWrap: { gap: Spacing.two, alignItems: 'center' },
+  retryButton: {
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.four,
+    backgroundColor: Colors.backgroundElement,
+    borderRadius: 10,
+  },
+  retryText: {
+    color: Colors.accent,
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
 });

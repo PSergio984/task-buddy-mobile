@@ -8,12 +8,11 @@ import { SymbolView } from 'expo-symbols';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import type { Daily, DailyCheckInput, Recurrence } from '@/api/types';
+import { reminderLabel, WEEKDAY_SHORT } from '@/components/game-utils';
 import { Colors, Spacing } from '@/constants/colors';
 
-const WEEKDAY_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-
 /** One-line summary of a stored recurrence blob; unknown shapes → 'Custom'. */
-function recurrenceLabel(recurrence: Recurrence | undefined): string {
+export function recurrenceLabel(recurrence: Recurrence | undefined): string {
   switch (recurrence?.kind) {
     case 'daily':
       return 'Every day';
@@ -30,12 +29,6 @@ function recurrenceLabel(recurrence: Recurrence | undefined): string {
     default:
       return 'Custom';
   }
-}
-
-/** Up to two reminder times shown, then a "+n" remainder. */
-function reminderLabel(times: string[]): string {
-  if (times.length <= 2) return times.join(' · ');
-  return `${times.slice(0, 2).join(' · ')} +${times.length - 2}`;
 }
 
 interface CheckBoxProps {

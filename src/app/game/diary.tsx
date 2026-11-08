@@ -5,13 +5,22 @@
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
-import { useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  FlatList,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import { useAuth } from '@/api/auth';
 import { diaryApi } from '@/api/game';
 import type { DiaryEntry, DiaryEntryInput, DiaryEntryKind, DiaryEntryPatch } from '@/api/types';
-import { todayUtcDay, utcDayLabel } from '@/components/activity/dates';
+import { addUtcDays, todayUtcDay, utcDayLabel, type UtcDay } from '@/components/activity/dates';
 import { DiaryEntryCard } from '@/components/diary/entry-card';
 import { DiaryEntryEditor } from '@/components/diary/entry-editor';
 import { Colors, Spacing } from '@/constants/colors';
@@ -33,7 +42,11 @@ export default function DiaryScreen() {
     enabled: !!token,
   });
 
-  const invalidate = () => void queryClient.invalidateQueries({ queryKey: ['diary'] });
+  const invalidate = () => {
+    void queryClient.invalidateQueries({ queryKey: ['diary'] });
+    // Timeline day responses embed the same DiaryEntry rows.
+    void queryClient.invalidateQueries({ queryKey: ['timeline'] });
+  };
 
   const createEntry = useMutation({
     mutationFn: (input: DiaryEntryInput) => diaryApi.create(input),
@@ -59,44 +72,89 @@ export default function DiaryScreen() {
   const mutationError = createEntry.error ?? updateEntry.error ?? deleteEntry.error;
 
   const entries = entriesQuery.data?.entries ?? [];
-  const today = todayUtcDay();
+  // UTC rollover — a screen left open across midnight must write to the
+  // new day, not the day it mounted on.
+  const [today, setToday] = useState<UtcDay>(todayUtcDay);
+  useEffect(() => {
+    const id = setInterval(() => {
+      const now = todayUtcDay();
+      setToday((d) => (d === now ? d : now));
+    }, 60_000);
+    return () => clearInterval(id);
+  }, []);
+  // The editor targets `entryDay` (today by default) — the ‹› stepper
+  // backfills missed days; the API accepts entry_date on create.
+  const [entryDay, setEntryDay] = useState<UtcDay | null>(null);
+  const targetDay = entryDay ?? today;
   // One stand-up per (user, UTC day) — the backend unique-indexes it, so
-  // the editor stops offering the kind once today's exists.
-  const hasTodayStandup = entries.some((e) => e.kind === 'standup' && e.entry_date === today);
-  const editorKind = hasTodayStandup ? 'freeform' : kind;
+  // the editor stops offering the kind once that day's exists. Gated on
+  // the list having loaded: an empty `entries` while pending would offer
+  // a kind that 422s on submit.
+  const hasDayStandup = entries.some((e) => e.kind === 'standup' && e.entry_date === targetDay);
+  const editorKind = hasDayStandup ? 'freeform' : kind;
 
   const header = (
     <View style={styles.headerCard}>
-      <Text style={styles.headerTitle}>Today — {utcDayLabel(today)}</Text>
-      {!hasTodayStandup ? (
-        <View style={styles.kindPicker} accessibilityRole="radiogroup">
-          {KINDS.map((k) => (
-            <Pressable
-              key={k}
-              style={[styles.kindOption, editorKind === k && styles.kindOptionActive]}
-              onPress={() => setKind(k)}
-              accessibilityRole="radio"
-              accessibilityState={{ selected: editorKind === k }}
-              accessibilityLabel={k === 'standup' ? 'Stand-up' : 'Freeform'}
-            >
-              <Text
-                style={[styles.kindOptionText, editorKind === k && styles.kindOptionTextActive]}
-              >
-                {k === 'standup' ? 'Stand-up' : 'Freeform'}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-      ) : null}
-      {/* Keyed on draftKey + kind — a successful create remounts the
-          editor empty while a failed submit keeps the draft for retry. */}
-      <DiaryEntryEditor
-        key={`new-${draftKey}-${editorKind}`}
-        kind={editorKind}
-        submitLabel={editorKind === 'standup' ? 'Save stand-up' : 'Add entry'}
-        busy={busy}
-        onSubmit={(patch) => createEntry.mutate({ kind: editorKind, ...patch })}
-      />
+      <View style={styles.dayNav}>
+        <Pressable
+          style={styles.dayNavButton}
+          onPress={() => setEntryDay(addUtcDays(targetDay, -1))}
+          accessibilityRole="button"
+          accessibilityLabel="Previous day"
+        >
+          <Text style={styles.dayNavButtonText}>‹</Text>
+        </Pressable>
+        <Text style={styles.headerTitle}>
+          {targetDay === today ? 'Today' : 'Entry for'} — {utcDayLabel(targetDay)}
+        </Text>
+        <Pressable
+          style={[styles.dayNavButton, targetDay === today && styles.dayNavDisabled]}
+          onPress={() => setEntryDay(addUtcDays(targetDay, 1))}
+          disabled={targetDay === today}
+          accessibilityRole="button"
+          accessibilityLabel="Next day"
+        >
+          <Text style={styles.dayNavButtonText}>›</Text>
+        </Pressable>
+      </View>
+      {entriesQuery.isPending ? (
+        <ActivityIndicator color={Colors.accent} />
+      ) : (
+        <>
+          {!hasDayStandup ? (
+            <View style={styles.kindPicker} accessibilityRole="radiogroup">
+              {KINDS.map((k) => (
+                <Pressable
+                  key={k}
+                  style={[styles.kindOption, editorKind === k && styles.kindOptionActive]}
+                  onPress={() => setKind(k)}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: editorKind === k }}
+                  accessibilityLabel={k === 'standup' ? 'Stand-up' : 'Freeform'}
+                >
+                  <Text
+                    style={[styles.kindOptionText, editorKind === k && styles.kindOptionTextActive]}
+                  >
+                    {k === 'standup' ? 'Stand-up' : 'Freeform'}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
+          {/* Keyed on draftKey + kind + target day — a successful create
+              remounts the editor empty while a failed submit keeps the
+              draft for retry. */}
+          <DiaryEntryEditor
+            key={`new-${draftKey}-${editorKind}-${targetDay}`}
+            kind={editorKind}
+            submitLabel={editorKind === 'standup' ? 'Save stand-up' : 'Add entry'}
+            busy={busy}
+            onSubmit={(patch) =>
+              createEntry.mutate({ kind: editorKind, entry_date: targetDay, ...patch })
+            }
+          />
+        </>
+      )}
     </View>
   );
 
@@ -123,36 +181,43 @@ export default function DiaryScreen() {
   return (
     <>
       <Stack.Screen options={{ title: 'Diary' }} />
-      <FlatList
+      <KeyboardAvoidingView
         style={styles.root}
-        contentContainerStyle={styles.content}
-        data={entries}
-        keyExtractor={(item) => String(item.id)}
-        renderItem={renderEntry}
-        ListHeaderComponent={
-          <View style={styles.headerWrap}>
-            {header}
-            {mutationError instanceof Error ? (
-              <Text style={styles.error}>{mutationError.message}</Text>
-            ) : null}
-            {entriesQuery.isPending ? (
-              <ActivityIndicator color={Colors.accent} />
-            ) : entriesQuery.isError ? (
-              <Text style={styles.error}>Couldn’t load your diary entries.</Text>
-            ) : null}
-          </View>
-        }
-        ListEmptyComponent={
-          !entriesQuery.isPending && !entriesQuery.isError ? (
-            <Text style={styles.empty}>No entries yet — write the first one above.</Text>
-          ) : undefined
-        }
-        ListFooterComponent={
-          entriesQuery.data?.has_more === true ? (
-            <Text style={styles.hasMore}>Older entries exist — showing the most recent page.</Text>
-          ) : undefined
-        }
-      />
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <FlatList
+          style={styles.root}
+          contentContainerStyle={styles.content}
+          data={entries}
+          keyExtractor={(item) => String(item.id)}
+          renderItem={renderEntry}
+          ListHeaderComponent={
+            <View style={styles.headerWrap}>
+              {header}
+              {mutationError instanceof Error ? (
+                <Text style={styles.error}>{mutationError.message}</Text>
+              ) : null}
+              {entriesQuery.isPending ? (
+                <ActivityIndicator color={Colors.accent} />
+              ) : entriesQuery.isError ? (
+                <Text style={styles.error}>Couldn’t load your diary entries.</Text>
+              ) : null}
+            </View>
+          }
+          ListEmptyComponent={
+            !entriesQuery.isPending && !entriesQuery.isError ? (
+              <Text style={styles.empty}>No entries yet — write the first one above.</Text>
+            ) : undefined
+          }
+          ListFooterComponent={
+            entriesQuery.data?.has_more === true ? (
+              <Text style={styles.hasMore}>
+                Older entries exist — showing the most recent page.
+              </Text>
+            ) : undefined
+          }
+        />
+      </KeyboardAvoidingView>
     </>
   );
 }
@@ -167,7 +232,24 @@ const styles = StyleSheet.create({
     padding: Spacing.three,
     gap: Spacing.three,
   },
-  headerTitle: { color: Colors.text, fontSize: 15, fontWeight: '700' },
+  headerTitle: {
+    color: Colors.text,
+    fontSize: 15,
+    fontWeight: '700',
+    flex: 1,
+    textAlign: 'center',
+  },
+  dayNav: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
+  dayNavButton: {
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: Colors.background,
+    borderRadius: 10,
+  },
+  dayNavButtonText: { color: Colors.text, fontSize: 20, fontWeight: '700' },
+  dayNavDisabled: { opacity: 0.3 },
   kindPicker: { flexDirection: 'row', gap: Spacing.two },
   kindOption: {
     minHeight: 44,

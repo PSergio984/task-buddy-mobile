@@ -20,6 +20,7 @@ import {
 } from 'react-native';
 
 import type { Habit, HabitDirection, HabitInput, SessionDifficulty } from '@/api/types';
+import { ChipGroup } from '@/components/chip-group';
 import { Colors, Spacing } from '@/constants/colors';
 
 /** Mirrors the backend's HabitIn.title max_length. */
@@ -37,34 +38,6 @@ const DIFFICULTY_OPTIONS: { value: SessionDifficulty; label: string }[] = [
   { value: 'medium', label: 'Medium' },
   { value: 'hard', label: 'Hard' },
 ];
-
-function ChipGroup<T extends string | number>({
-  options,
-  selected,
-  onSelect,
-}: {
-  options: { value: T; label: string }[];
-  selected: T;
-  onSelect: (value: T) => void;
-}) {
-  return (
-    <View style={styles.chipRow}>
-      {options.map((o) => (
-        <Pressable
-          key={String(o.value)}
-          accessibilityRole="button"
-          accessibilityState={{ selected: selected === o.value }}
-          style={[styles.chip, selected === o.value && styles.chipSelected]}
-          onPress={() => onSelect(o.value)}
-        >
-          <Text style={[styles.chipText, selected === o.value && styles.chipTextSelected]}>
-            {o.label}
-          </Text>
-        </Pressable>
-      ))}
-    </View>
-  );
-}
 
 interface HabitEditorProps {
   /** undefined → create form; a habit → edit form prefilled from it. */
@@ -106,7 +79,7 @@ export function HabitEditor({ initial, busy, error, onSubmit, onClose }: HabitEd
   };
 
   return (
-    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible transparent statusBarTranslucent animationType="fade" onRequestClose={onClose}>
       <KeyboardAvoidingView
         style={styles.backdrop}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -171,7 +144,7 @@ export function HabitEditor({ initial, busy, error, onSubmit, onClose }: HabitEd
               />
             </View>
             {!bindable ? (
-              <Text style={styles.hint}>Negative-only habits can&rsquo;t bind to focus.</Text>
+              <Text style={styles.hint}>Negative-only habits can’t bind to focus.</Text>
             ) : null}
 
             {error ? <Text style={styles.errorText}>{error}</Text> : null}
@@ -241,19 +214,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.two,
   },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
-  chip: {
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 999,
-    paddingHorizontal: Spacing.four,
-    paddingVertical: 6,
-    minHeight: 44,
-    justifyContent: 'center',
-  },
-  chipSelected: { borderColor: Colors.accent, backgroundColor: Colors.backgroundSelected },
-  chipText: { color: Colors.textSecondary, fontSize: 13, fontWeight: '600' },
-  chipTextSelected: { color: Colors.accent },
   switchRow: {
     flexDirection: 'row',
     alignItems: 'center',

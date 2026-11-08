@@ -7,7 +7,7 @@
 /** A UTC calendar day, "YYYY-MM-DD". */
 export type UtcDay = string;
 
-const DAY_MS = 86_400_000;
+export const DAY_MS = 86_400_000;
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
 const MONTHS = [

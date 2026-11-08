@@ -62,16 +62,23 @@ export function AvatarSection({
   const [seedText, setSeedText] = useState<string | null>(null);
   const seed = seedText ?? config.seed;
 
+  // Every save path carries a non-empty seed — an absent seed must persist
+  // as the fallback the preview shows, not '' (avatarConfigToUrl(null) →
+  // the avatar degrades to a letter everywhere else).
+  const save = (patch: Record<string, unknown>): void => {
+    onSave({ ...config, seed: config.seed || FALLBACK_SEED, ...patch });
+  };
+
   const setTrait = (key: string, value: string | null): void => {
     const traits = { ...config.traits };
     if (value === null) delete traits[key];
     else traits[key] = value;
-    onSave({ ...config, traits });
+    save({ traits });
   };
 
   const commitSeed = (): void => {
     const next = seed.trim() || FALLBACK_SEED;
-    if (next !== config.seed) onSave({ ...config, seed: next });
+    if (next !== config.seed) save({ seed: next });
   };
 
   return (
@@ -110,7 +117,7 @@ export function AvatarSection({
             accessibilityState={{ selected: config.style === style, disabled: pending }}
             style={[styles.chip, config.style === style && styles.chipSelected]}
             disabled={pending}
-            onPress={() => onSave({ ...config, style })}
+            onPress={() => save({ style })}
           >
             <Text style={[styles.chipText, config.style === style && styles.chipTextSelected]}>
               {style}
