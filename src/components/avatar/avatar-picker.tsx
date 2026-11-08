@@ -6,9 +6,10 @@
  * Keys the picker doesn't manage (costume flags, unknown traits) carry
  * through normalizeAvatarConfig untouched.
  */
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import type { AvatarConfig } from './avatar-config';
 import type { GearItem } from '@/api/types';
 import { Colors, Spacing } from '@/constants/colors';
 
@@ -61,15 +62,32 @@ export function AvatarSection({
   const [seedText, setSeedText] = useState<string | null>(null);
   const seed = seedText ?? config.seed;
 
+  // Saves merge onto the last config this component *requested*, not the
+  // last server echo — concurrent whole-blob PATCHes (a trait chip tapped
+  // while a seed commit is in flight) would otherwise silently revert
+  // each other, last-write-wins.
+  const requested = useRef<AvatarConfig | null>(null);
+  useEffect(() => {
+    requested.current = null;
+  }, [rawConfig]);
+
   // Every save path carries a non-empty seed — an absent seed must persist
   // as the fallback the preview shows, not '' (avatarConfigToUrl(null) →
   // the avatar degrades to a letter everywhere else).
   const save = (patch: Record<string, unknown>): void => {
-    onSave({ ...withFallbackSeed(config), ...patch });
+    const next = {
+      ...withFallbackSeed(requested.current ?? config),
+      // A seed still being typed is user intent — a concurrent chip tap
+      // must not persist the pre-edit seed over it.
+      ...(seedText !== null ? { seed: seedText.trim() || FALLBACK_SEED } : {}),
+      ...patch,
+    };
+    requested.current = next;
+    onSave(next);
   };
 
   const setTrait = (key: string, value: string | null): void => {
-    const traits = { ...config.traits };
+    const traits = { ...(requested.current ?? config).traits };
     if (value === null) delete traits[key];
     else traits[key] = value;
     save({ traits });

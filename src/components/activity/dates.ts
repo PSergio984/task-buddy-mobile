@@ -42,7 +42,11 @@ export function utcDayLabel(day: UtcDay): string {
 
 /** "14:32" — HH:mm on the UTC axis (the same axis the backend buckets on). */
 export function utcTimeLabel(iso: string): string {
-  const d = new Date(iso);
+  // Offset-less ISO parses as LOCAL per the ES spec — backend rows can
+  // arrive that way (SQLite-naive created_at), so pin them to UTC before
+  // reading UTC hours, or non-UTC devices see shifted times.
+  const hasOffset = iso.endsWith('Z') || /[+-]\d{2}:?\d{2}$/.test(iso);
+  const d = new Date(hasOffset ? iso : `${iso}Z`);
   if (Number.isNaN(d.getTime())) return '--:--';
   const hh = d.getUTCHours().toString().padStart(2, '0');
   const mm = d.getUTCMinutes().toString().padStart(2, '0');

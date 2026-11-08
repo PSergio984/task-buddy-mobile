@@ -71,9 +71,21 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
 
   let response: Response;
   try {
-    response = await fetch(`${API_URL}${path}`, { method, headers, body });
-  } catch {
-    throw new ApiError(0, `Cannot reach the server at ${API_URL}`);
+    // A hung socket must not wedge callers forever — the event queue's
+    // `flushing` guard and every screen mutation sit behind this await.
+    response = await fetch(`${API_URL}${path}`, {
+      method,
+      headers,
+      body,
+      signal: AbortSignal.timeout(30_000),
+    });
+  } catch (e) {
+    throw new ApiError(
+      0,
+      e instanceof Error && e.name === 'TimeoutError'
+        ? `The server at ${API_URL} did not respond in time`
+        : `Cannot reach the server at ${API_URL}`,
+    );
   }
 
   if (response.status === 204) return undefined as T;

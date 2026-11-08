@@ -29,9 +29,9 @@ import { useAuth } from '@/api/auth';
 import { ApiError } from '@/api/client';
 import { dailiesApi } from '@/api/game';
 import type { Daily, DailyCheckInput, DailyCheckResponse, DailyInput } from '@/api/types';
+import { toggled } from '@/components/game-utils';
 import { DailyEditor } from '@/components/dailies/daily-editor';
 import { DailyRow } from '@/components/dailies/daily-row';
-import { toggled } from '@/components/game-utils';
 import { Colors, Spacing } from '@/constants/colors';
 import { createEventQueue } from '@/game/event-queue';
 
@@ -101,8 +101,15 @@ export default function DailiesScreen() {
     }
   };
 
-  // Deliver checks queued by an earlier session (or an earlier visit here).
+  // Deliver checks queued by an earlier session (or an earlier visit here)
+  // — and keep badges honest when a flush this screen didn't start (the
+  // root foreground flush, a habits-mount retry) delivers shared events.
   useEffect(() => {
+    const unsub = queue.subscribe((sent) => {
+      setDeadLetters(queue.deadLetterCount());
+      refreshQueued();
+      if (sent > 0) invalidateAfterScore();
+    });
     void queue
       .hydrate()
       .then(() => queue.flush())
@@ -112,6 +119,7 @@ export default function DailiesScreen() {
         if (r.sent > 0) invalidateAfterScore();
       })
       .catch(() => {});
+    return unsub;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- queue is a stable singleton
   }, [queue]);
 
@@ -171,19 +179,29 @@ export default function DailiesScreen() {
             },
             eid,
           );
-          refreshQueued();
-          try {
-            const res = await queue.flush();
+        } catch {
+          setActionError('Could not queue the check — it was not recorded.');
+          return;
+        }
+        // The check is durably parked — release the row now and let the
+        // flush retry in the background (~7s of backoff offline).
+        setCheckingIds((s) => toggled(s, daily.id, false));
+        refreshQueued();
+        void queue
+          .flush()
+          .then((res) => {
             setDeadLetters(queue.deadLetterCount());
             refreshQueued();
             if (res.sent > 0) invalidateAfterScore();
-          } catch {
-            // Enqueue already persisted — a flush fault can't lose it.
+            if (res.failed) setActionError('Check queued — it will sync when you are back online.');
+          })
+          .catch(() => {
+            // A persist-fault can follow delivered batches — resync anyway.
+            setDeadLetters(queue.deadLetterCount());
+            refreshQueued();
+            invalidateAfterScore();
             setActionError('Check queued — it will sync when you are back online.');
-          }
-        } catch {
-          setActionError('Could not queue the check — it was not recorded.');
-        }
+          });
       } else {
         setActionError(e instanceof Error ? e.message : 'Could not record the check.');
       }
@@ -195,6 +213,7 @@ export default function DailiesScreen() {
   const openEditor = (daily?: Daily) => {
     createDaily.reset();
     updateDaily.reset();
+    deleteDaily.reset();
     setEditor({ daily });
   };
 

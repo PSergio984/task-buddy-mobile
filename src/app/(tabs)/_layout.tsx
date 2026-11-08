@@ -7,7 +7,13 @@ import { Colors } from '@/constants/colors';
 
 function SignOutButton() {
   return (
-    <Pressable onPress={() => void logout()} hitSlop={8} style={styles.signOut}>
+    <Pressable
+      onPress={() => void logout()}
+      hitSlop={8}
+      style={styles.signOut}
+      accessibilityRole="button"
+      accessibilityLabel="Sign out"
+    >
       <Text style={styles.signOutText}>Sign out</Text>
     </Pressable>
   );

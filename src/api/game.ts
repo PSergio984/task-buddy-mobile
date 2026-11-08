@@ -157,9 +157,13 @@ export const activityApi = {
 };
 
 export const diaryApi = {
-  list: (date?: string) => {
-    const qs = date ? `?${new URLSearchParams({ date })}` : '';
-    return apiFetch<DiaryListResponse>(`/api/v1/game/diary${qs}`);
+  list: (date?: string, limit?: number, offset?: number) => {
+    const qs = new URLSearchParams();
+    if (date) qs.set('date', date);
+    if (limit !== undefined) qs.set('limit', String(limit));
+    if (offset !== undefined) qs.set('offset', String(offset));
+    const s = qs.toString();
+    return apiFetch<DiaryListResponse>(`/api/v1/game/diary${s ? `?${s}` : ''}`);
   },
   create: (input: DiaryEntryInput) =>
     apiFetch<DiaryEntry>('/api/v1/game/diary', { method: 'POST', json: input }),

@@ -106,13 +106,42 @@ export class EventQueue {
   private events: QueuedEvent[] = [];
   private deadLetters = 0;
   /** Set by purgeEventQueueStorage — mounted screens holding a stale
-   *  reference can neither flush nor re-persist the old account's queue. */
+   *  reference can neither flush nor re-persist the old account's queue.
+   *  Calls on an abandoned instance forward to the current shared queue
+   *  (when one exists) so a screen that outlives logout keeps working. */
   private abandoned = false;
   /** Memoized first-read: concurrent hydrate()/enqueue()/flush() callers
    *  join the same in-flight load instead of racing ahead on an empty
    *  queue and clobbering events that were still being restored. */
   private hydrating: Promise<void> | null = null;
   private flushing: Promise<FlushResult> | null = null;
+  /** Listeners fired after the pending set changes — screens derive
+   *  queued badges from these, and a flush they didn't start (the root
+   *  foreground flush, another screen's retry) would otherwise leave
+   *  them stale. The arg is how many events the flush delivered. */
+  private listeners = new Set<(sent: number) => void>();
+
+  /** The queue a stale reference should talk to — this instance unless it
+   *  was abandoned and a post-login shared queue replaced it. */
+  private delegate(): EventQueue {
+    return this.abandoned && shared !== null ? shared : this;
+  }
+
+  /** Subscribe to pending-set changes; returns the unsubscribe. A stale
+   *  reference forwards to the live queue so a remounted screen still
+   *  hears post-login flushes. */
+  subscribe(listener: (sent: number) => void): () => void {
+    const q = this.delegate();
+    if (q !== this) return q.subscribe(listener);
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  private notify(sent: number): void {
+    for (const listener of this.listeners) listener(sent);
+  }
 
   constructor(options: EventQueueOptions) {
     this.storage = options.storage;
@@ -129,6 +158,8 @@ export class EventQueue {
    *  A corrupt blob resolves to empty and never re-reads (deterministic);
    *  a transient read fault rejects and retries on the next call. */
   hydrate(): Promise<void> {
+    const q = this.delegate();
+    if (q !== this) return q.hydrate();
     this.hydrating ??= this.doHydrate();
     return this.hydrating;
   }
@@ -174,7 +205,8 @@ export class EventQueue {
   /** Events dropped after MAX_FLUSH_ATTEMPTS deterministic rejects —
    *  persisted so a poisoned batch is an honest loss, not a silent one. */
   deadLetterCount(): number {
-    return this.deadLetters;
+    const q = this.delegate();
+    return q !== this ? q.deadLetterCount() : this.deadLetters;
   }
 
   private deadKey(): string {
@@ -182,10 +214,15 @@ export class EventQueue {
   }
 
   private async persist(): Promise<void> {
+    // An abandoned instance must never write — an in-flight flush can
+    // resolve after the purge and would persist [] over the new account's
+    // freshly-enqueued events.
+    if (this.abandoned) return;
     await this.storage.setItem(this.storageKey, JSON.stringify(this.events));
   }
 
   private async persistDeadLetters(): Promise<void> {
+    if (this.abandoned) return;
     await this.storage.setItem(this.deadKey(), String(this.deadLetters));
   }
 
@@ -198,7 +235,8 @@ export class EventQueue {
 
   /** Pending events, post-hydrate — screens derive queued badges from these. */
   pending(): readonly QueuedEvent[] {
-    return this.events;
+    const q = this.delegate();
+    return q !== this ? q.pending() : this.events;
   }
 
   /** Queue one event for the next flush. Id assigned via expo-crypto UUID
@@ -209,6 +247,8 @@ export class EventQueue {
     payload: Record<string, unknown>,
     clientEventId?: string,
   ): Promise<QueuedEvent> {
+    const q = this.delegate();
+    if (q !== this) return q.enqueue(type, payload, clientEventId);
     // A transient storage fault gets one immediate retry — evidence must not
     // die on a momentary read failure (a durable failure still rejects and is
     // counted by the caller's drop counter, not swallowed silently).
@@ -221,7 +261,15 @@ export class EventQueue {
       payload,
     };
     this.events.push(event);
-    await this.persist();
+    try {
+      await this.persist();
+    } catch (e) {
+      // Reported-as-lost evidence must not silently deliver on the next
+      // flush — roll the in-memory copy back before rethrowing.
+      this.events = this.events.filter((x) => x !== event);
+      throw e;
+    }
+    this.notify(0);
     return event;
   }
 
@@ -240,9 +288,22 @@ export class EventQueue {
    * Re-entrant calls join the in-flight flush instead of double-sending.
    */
   flush(): Promise<FlushResult> {
-    this.flushing ??= this.doFlush().finally(() => {
-      this.flushing = null;
-    });
+    const q = this.delegate();
+    if (q !== this) return q.flush();
+    this.flushing ??= this.doFlush()
+      .then((r) => {
+        this.notify(r.sent);
+        return r;
+      })
+      .catch((e) => {
+        // A faulted flush can still have delivered earlier batches —
+        // refresh badges before the error propagates.
+        this.notify(0);
+        throw e;
+      })
+      .finally(() => {
+        this.flushing = null;
+      });
     return this.flushing;
   }
 

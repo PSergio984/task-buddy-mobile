@@ -41,8 +41,10 @@ function DayNavigator({
       </Pressable>
       <Text style={styles.navLabel}>{utcDayLabel(day)} · UTC</Text>
       <Pressable
-        style={styles.navButton}
+        style={[styles.navButton, day === today && styles.navDisabled]}
         onPress={() => onChange(addUtcDays(day, 1))}
+        disabled={day === today}
+        accessibilityState={{ disabled: day === today }}
         accessibilityRole="button"
         accessibilityLabel="Next day"
       >
@@ -179,6 +181,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   navButtonText: { color: Colors.text, fontSize: 22, fontWeight: '700' },
+  navDisabled: { opacity: 0.4 },
   navLabel: { flex: 1, color: Colors.text, fontSize: 15, fontWeight: '700', textAlign: 'center' },
   todayButton: { minHeight: 44, justifyContent: 'center', paddingHorizontal: Spacing.two },
   todayText: {

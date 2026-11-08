@@ -68,6 +68,7 @@ jest.mock('@/game/event-queue', () => ({
     enqueue: mockEnqueue,
     deadLetterCount: () => 0,
     pending: () => [],
+    subscribe: () => () => {},
   })),
 }));
 
@@ -90,7 +91,7 @@ const daily: Daily = {
 };
 
 async function renderScreen() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   return await render(
     <QueryClientProvider client={client}>
       <DailiesScreen />
