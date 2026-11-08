@@ -15,14 +15,13 @@ import { Colors, Spacing } from '@/constants/colors';
 import { GameAvatar } from './avatar';
 import {
   AVATAR_STYLES,
+  FALLBACK_SEED,
   normalizeAvatarConfig,
   PIXEL_ART_COLORS,
   PIXEL_ART_VARIANTS,
   traitLabel,
+  withFallbackSeed,
 } from './avatar-config';
-
-/** No stored seed → preview and save both use this (web: username → 'taskbuddy'). */
-const FALLBACK_SEED = 'taskbuddy';
 
 const VARIANT_LABELS: Record<string, string> = {
   hair: 'Hair',
@@ -66,7 +65,7 @@ export function AvatarSection({
   // as the fallback the preview shows, not '' (avatarConfigToUrl(null) →
   // the avatar degrades to a letter everywhere else).
   const save = (patch: Record<string, unknown>): void => {
-    onSave({ ...config, seed: config.seed || FALLBACK_SEED, ...patch });
+    onSave({ ...withFallbackSeed(config), ...patch });
   };
 
   const setTrait = (key: string, value: string | null): void => {
@@ -84,11 +83,7 @@ export function AvatarSection({
   return (
     <View style={styles.section}>
       <View style={styles.previewRow}>
-        <GameAvatar
-          config={{ ...config, seed: config.seed || FALLBACK_SEED }}
-          items={items}
-          size={96}
-        />
+        <GameAvatar config={withFallbackSeed(config)} items={items} size={96} />
         <View style={styles.seedField}>
           <Text style={styles.label}>Seed</Text>
           <TextInput

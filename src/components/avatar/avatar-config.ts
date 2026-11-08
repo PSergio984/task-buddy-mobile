@@ -25,6 +25,16 @@ export type AvatarConfig = {
 /** DiceBear pixel-art is the spec'd avatar style (#46). */
 export const DEFAULT_AVATAR_STYLE = 'pixel-art';
 
+/** Seed injected wherever an absent one would silently produce a null
+ *  DiceBear URL — saves and previews must agree on it. */
+export const FALLBACK_SEED = 'taskbuddy';
+
+/** A config guaranteed renderable — the empty-seed bug this guards
+ *  persisted '' while the preview masked it with the fallback. */
+export function withFallbackSeed(config: AvatarConfig): AvatarConfig {
+  return { ...config, seed: config.seed || FALLBACK_SEED };
+}
+
 /** The DiceBear styles the picker offers — also the URL allowlist, so a
  *  stored config can never inject an arbitrary path segment. */
 export const AVATAR_STYLES = [
