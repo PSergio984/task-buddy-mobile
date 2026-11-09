@@ -97,8 +97,7 @@ export default function ImportScreen() {
     const source = text.trim();
     if (source === '' || overLimit || extractInFlight.current) return;
     extractInFlight.current = true;
-    const key =
-      extractKeyCache?.source === source ? extractKeyCache.key : Crypto.randomUUID();
+    const key = extractKeyCache?.source === source ? extractKeyCache.key : Crypto.randomUUID();
     extractKeyCache = { source, key };
     extract.mutate({ source, key });
   };
