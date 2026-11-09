@@ -32,9 +32,9 @@ import { Colors, Spacing } from '@/constants/colors';
 const MAX_TEXT = 10_000;
 
 // Module-level so the key survives screen unmount: leaving mid-extract
-// loses the result but not the key — re-submitting the same text replays
-// the cached (or still in-flight) response instead of billing a second
-// LLM call, which is what lets navigation proceed during extraction.
+// loses the result but not the key — re-submitting the same text 409s
+// while the original is still in-flight, then replays its cached response
+// once it finishes, instead of billing a second LLM call.
 let extractKeyCache: { source: string; key: string } | null = null;
 
 /** Unicode code points — the backend counts these, not UTF-16 units
@@ -88,9 +88,9 @@ export default function ImportScreen() {
 
   // Back / swipe must not interrupt the POST loop — a pop mid-commit hides
   // per-card state. Extraction is NOT blocked: the key lives module-level,
-  // so leaving mid-flight loses the response but re-submitting the same
-  // text replays it (or attaches to the still-running call) — no double
-  // billing, and nobody is stuck watching a 90s spinner.
+  // so a return mid-flight resubmits under the same key — 409 while the
+  // original runs, replayed response once it finishes. No double billing,
+  // and nobody is stuck watching a 90s spinner.
   usePreventRemove(committing);
 
   const submitExtract = () => {
