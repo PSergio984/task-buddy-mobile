@@ -8,6 +8,10 @@ import type { ImportTaskProposal, TaskCreateData, TaskPriority } from '@/api/typ
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+/** Code-point-aware clip — String.prototype.slice counts UTF-16 units and
+ *  can split a surrogate pair at the boundary, corrupting an emoji. */
+const clip = (s: string, n: number) => Array.from(s).slice(0, n).join('');
+
 export interface DraftProposal {
   /** Stable key across edits/removals (extraction order is unique). */
   id: number;
@@ -40,20 +44,25 @@ export function toDrafts(proposals: ImportTaskProposal[]): DraftProposal[] {
     created: false,
     idempotencyKey: null,
     error: null,
-    title: p.title.slice(0, 100),
+    title: clip(p.title, 100),
     deadline: p.proposed_deadline?.slice(0, 10) ?? '',
     priority: p.priority,
     description: p.description,
     projectId: p.suggested_project_id,
-    subtasks: p.subtasks.map((s) => s.title),
+    // Clip subtask titles at intake too — the card shows what will save.
+    subtasks: p.subtasks.map((s) => clip(s.title, 80)),
   }));
 }
 
-/** null = valid. Only YYYY-MM-DD accepted — matches the stored slice. */
+/** null = valid. Only real YYYY-MM-DD accepted — Date.parse alone
+ *  normalizes impossible dates like 2026-02-31 into March, so the parsed
+ *  value must round-trip back to the input. */
 export function deadlineError(deadline: string): string | null {
   if (deadline === '') return null;
-  if (!DATE_RE.test(deadline) || Number.isNaN(Date.parse(`${deadline}T00:00:00Z`))) {
-    return 'Use YYYY-MM-DD';
+  if (!DATE_RE.test(deadline)) return 'Use YYYY-MM-DD';
+  const parsed = Date.parse(`${deadline}T00:00:00Z`);
+  if (Number.isNaN(parsed) || new Date(parsed).toISOString().slice(0, 10) !== deadline) {
+    return 'Use a real calendar date';
   }
   return null;
 }
@@ -73,13 +82,15 @@ export function committable(drafts: DraftProposal[]): DraftProposal[] {
  *  fixed in-app and would 422. */
 export function toTaskCreate(d: DraftProposal): TaskCreateData {
   return {
-    title: d.title.trim().slice(0, 100),
-    ...(d.description?.trim() ? { description: d.description.trim().slice(0, 2000) } : {}),
-    ...(d.deadline ? { due_date: `${d.deadline}T00:00:00Z` } : {}),
+    title: clip(d.title.trim(), 100),
+    ...(d.description?.trim() ? { description: clip(d.description.trim(), 2000) } : {}),
+    // Noon UTC — midnight reads as the previous day for users west of UTC
+    // (the task list formats with toLocaleDateString).
+    ...(d.deadline ? { due_date: `${d.deadline}T12:00:00Z` } : {}),
     priority: d.priority,
     ...(d.projectId !== null ? { project_id: d.projectId } : {}),
     ...(d.subtasks.length > 0
-      ? { subtasks: d.subtasks.map((title) => ({ title: title.slice(0, 80) })) }
+      ? { subtasks: d.subtasks.map((title) => ({ title: clip(title, 80) })) }
       : {}),
   };
 }

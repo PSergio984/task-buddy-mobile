@@ -31,6 +31,16 @@ import { Colors, Spacing } from '@/constants/colors';
 /** Matches the extract contract's 1..10_000-char text field. */
 const MAX_TEXT = 10_000;
 
+// Module-level so the key survives screen unmount: leaving mid-extract
+// loses the result but not the key — re-submitting the same text replays
+// the cached (or still in-flight) response instead of billing a second
+// LLM call, which is what lets navigation proceed during extraction.
+let extractKeyCache: { source: string; key: string } | null = null;
+
+/** Unicode code points — the backend counts these, not UTF-16 units
+ *  (String.length would double-count emoji and false-positive the cap). */
+const codePoints = (s: string) => Array.from(s).length;
+
 export default function ImportScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -44,13 +54,8 @@ export default function ImportScreen() {
   // see committing=false. Refs gate the actual work.
   const commitInFlight = useRef(false);
   const extractInFlight = useRef(false);
-  // Idempotency key per extract source text — a retry of the SAME text
-  // reuses it (backend replays the cached response instead of billing a
-  // second LLM call); changed text mints a new one (same key + different
-  // body would 422).
-  const extractKey = useRef<{ source: string; key: string } | null>(null);
-
-  const overLimit = text.length > MAX_TEXT;
+  const textCount = codePoints(text);
+  const overLimit = textCount > MAX_TEXT;
 
   // A second pick while the picker is already open rejects and flashes a
   // bogus error — same stale-state shape as the commit/extract guards.
@@ -61,7 +66,6 @@ export default function ImportScreen() {
   // or the dispatch is swallowed and the user is stranded on Created cards.
   useEffect(() => {
     if (!commitDone) return;
-    void queryClient.invalidateQueries({ queryKey: ['tasks'] });
     if (router.canGoBack()) {
       router.back();
     } else {
@@ -82,22 +86,20 @@ export default function ImportScreen() {
     },
   });
 
-  // Header back / swipe-back must not interrupt the POST loop or the
-  // extract call — a pop mid-flight hides partial state, and losing the
-  // extract result also loses its key, so re-extracting identical notes
-  // bills a second LLM call. v58: usePreventRemove is the stable
-  // expo-router API; with no callback the removal is blocked silently
-  // (the in-progress spinner is feedback enough). Declared below the
-  // mutation because extract.isPending is the reactive flag.
-  usePreventRemove(committing || extract.isPending);
+  // Back / swipe must not interrupt the POST loop — a pop mid-commit hides
+  // per-card state. Extraction is NOT blocked: the key lives module-level,
+  // so leaving mid-flight loses the response but re-submitting the same
+  // text replays it (or attaches to the still-running call) — no double
+  // billing, and nobody is stuck watching a 90s spinner.
+  usePreventRemove(committing);
 
   const submitExtract = () => {
     const source = text.trim();
     if (source === '' || overLimit || extractInFlight.current) return;
     extractInFlight.current = true;
     const key =
-      extractKey.current?.source === source ? extractKey.current.key : Crypto.randomUUID();
-    extractKey.current = { source, key };
+      extractKeyCache?.source === source ? extractKeyCache.key : Crypto.randomUUID();
+    extractKeyCache = { source, key };
     extract.mutate({ source, key });
   };
 
@@ -120,8 +122,8 @@ export default function ImportScreen() {
         setInputError('Pick a .md or .txt file.');
         return;
       }
-      // UTF-8 chars cost ≥1 byte each, so >40 KB guarantees >10,000 chars
-      // — reject before buffering the whole file into memory.
+      // Each code point costs at most 4 UTF-8 bytes, so >40 KB guarantees
+      // >10,000 code points — reject before buffering the file into memory.
       if (asset.size != null && asset.size > 40_000) {
         setInputError(`"${asset.name}" is over the 10,000-character limit.`);
         return;
@@ -129,7 +131,7 @@ export default function ImportScreen() {
       // The contract limit counts characters, not bytes — check after the
       // read (asset.size is bytes and would false-positive on multibyte).
       const picked = await new File(asset.uri).text();
-      if (picked.length > MAX_TEXT) {
+      if (codePoints(picked) > MAX_TEXT) {
         setInputError(`"${asset.name}" is over the 10,000-character limit.`);
         return;
       }
@@ -172,12 +174,14 @@ export default function ImportScreen() {
         }) ?? ds,
     );
     let failures = 0;
+    let anyCreated = false;
     try {
       for (const job of jobs) {
         try {
           // Sequential: per-card progress stays visible and each create's
           // idempotency key is already committed to state before it posts.
           await tasksApi.create(job.payload, job.key);
+          anyCreated = true;
           setDrafts(
             (ds) =>
               ds?.map((d) => (d.id === job.id ? { ...d, created: true, error: null } : d)) ?? ds,
@@ -189,6 +193,7 @@ export default function ImportScreen() {
           // The task exists with its earlier payload; mark it created
           // instead of 422ing on every retry.
           if (e instanceof ApiError && e.status === 422 && /idempotency/i.test(e.message)) {
+            anyCreated = true;
             setDrafts(
               (ds) =>
                 ds?.map((d) =>
@@ -221,6 +226,11 @@ export default function ImportScreen() {
     // Cards that were included but never committable (bad title/deadline)
     // block completion the same way failures do.
     const leftover = drafts.filter((d) => d.included && !d.created && !targetIds.has(d.id));
+    // Invalidate on ANY success — a partial commit still landed tasks, and
+    // backing out early must not leave the list stale.
+    if (anyCreated) {
+      void queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    }
     if (failures === 0 && leftover.length === 0) {
       setCommitDone(true);
     }
@@ -249,7 +259,11 @@ export default function ImportScreen() {
             {reason ? <Text style={styles.reasonText}>{reason}</Text> : null}
             <Pressable
               onPress={startOver}
-              disabled={committing}
+              // Once a card is created the task exists server-side — going
+              // back to the notes would discard each card's `created` flag
+              // and stored key, and a re-commit would double-create them.
+              disabled={committing || drafts.some((d) => d.created)}
+              style={committing || drafts.some((d) => d.created) ? styles.disabled : undefined}
               accessibilityRole="button"
               accessibilityLabel="Edit the notes"
             >
@@ -300,7 +314,7 @@ export default function ImportScreen() {
           accessibilityLabel="Notes to import"
         />
         <Text style={[styles.counter, overLimit && styles.counterOver]}>
-          {text.length.toLocaleString()} / {MAX_TEXT.toLocaleString()}
+          {textCount.toLocaleString()} / {MAX_TEXT.toLocaleString()}
         </Text>
         {overLimit ? (
           <Text style={styles.errorText}>

@@ -95,8 +95,8 @@ export function ProposalCard({ draft, busy, onChange, onRemove }: ProposalCardPr
 
       {draft.subtasks.length > 0 ? (
         <View style={styles.subtasks}>
-          {draft.subtasks.map((title) => (
-            <Text key={title} style={styles.subtaskText} numberOfLines={1}>
+          {draft.subtasks.map((title, index) => (
+            <Text key={index} style={styles.subtaskText} numberOfLines={1}>
               • {title}
             </Text>
           ))}

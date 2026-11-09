@@ -161,7 +161,8 @@ export const planApi = {
 export const importApi = {
   /** Notes → task proposals (backend#91). Extraction is server-side AI —
    *  no offline path; ApiError(0) means the backend is unreachable. The
-   *  LLM call can exceed the default 30s window, so it gets 90s, and the
+   *  LLM call can exceed the default 30s window, so it gets 130s (past
+   *  the backend's 120s per-key LLM lock), and the
    *  X-Idempotency-Key lets a user retry replay the cached response
    *  instead of billing a second extraction — pass the SAME key for the
    *  SAME source text. */
@@ -170,6 +171,8 @@ export const importApi = {
       method: 'POST',
       json: { text },
       headers: { 'X-Idempotency-Key': idempotencyKey },
-      timeoutMs: 90_000,
+      // Outlast the backend's 120s per-key LLM lock — a shorter timeout
+      // aborts while the server still holds the key, and the retry 409s.
+      timeoutMs: 130_000,
     }),
 };

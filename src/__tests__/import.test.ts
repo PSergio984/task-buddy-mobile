@@ -68,6 +68,10 @@ describe('deadlineError', () => {
   it('rejects malformed and nonexistent dates', () => {
     expect(deadlineError('15/03/2026')).not.toBeNull();
     expect(deadlineError('2026-13-01')).not.toBeNull();
+    // Date.parse normalizes Feb 31 into March — the round-trip check
+    // must catch what the parser accepts.
+    expect(deadlineError('2026-02-31')).not.toBeNull();
+    expect(deadlineError('2026-02-30')).not.toBeNull();
   });
 });
 
@@ -103,7 +107,9 @@ describe('toTaskCreate', () => {
     expect(payload).toEqual({
       title: 'Plan trip',
       description: 'Flights + hotel',
-      due_date: '2026-03-15T00:00:00Z',
+      // Noon UTC keeps the calendar date for offsets UTC-11..UTC+11 —
+      // midnight reads as the previous day west of UTC.
+      due_date: '2026-03-15T12:00:00Z',
       priority: 'HIGH',
       project_id: 7,
       subtasks: [{ title: 'Book flights' }],
@@ -125,6 +131,11 @@ describe('toTaskCreate', () => {
     );
     expect(payload.description).toBe('d'.repeat(2000));
     expect(payload.subtasks).toEqual([{ title: 's'.repeat(80) }]);
+  });
+
+  it('clips on code points so an emoji at the boundary is not split', () => {
+    const payload = toTaskCreate(draft({ title: '🚀'.repeat(120) }));
+    expect(payload.title).toBe('🚀'.repeat(100));
   });
 
   it('clips an over-limit proposal title at intake and at payload build', () => {
