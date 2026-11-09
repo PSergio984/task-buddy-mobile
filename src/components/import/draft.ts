@@ -40,7 +40,7 @@ export function toDrafts(proposals: ImportTaskProposal[]): DraftProposal[] {
     created: false,
     idempotencyKey: null,
     error: null,
-    title: p.title,
+    title: p.title.slice(0, 100),
     deadline: p.proposed_deadline?.slice(0, 10) ?? '',
     priority: p.priority,
     description: p.description,

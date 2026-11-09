@@ -126,6 +126,13 @@ describe('toTaskCreate', () => {
     expect(payload.description).toBe('d'.repeat(2000));
     expect(payload.subtasks).toEqual([{ title: 's'.repeat(80) }]);
   });
+
+  it('clips an over-limit proposal title at intake and at payload build', () => {
+    const long = 't'.repeat(150);
+    const d = toDrafts([proposal({ title: long })])[0];
+    expect(d.title).toBe('t'.repeat(100));
+    expect(toTaskCreate(d).title).toBe('t'.repeat(100));
+  });
 });
 
 describe('planJobs', () => {
