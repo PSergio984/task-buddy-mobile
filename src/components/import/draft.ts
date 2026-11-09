@@ -67,14 +67,41 @@ export function committable(drafts: DraftProposal[]): DraftProposal[] {
 }
 
 /** TaskCreateRequest payload for one card. Callers must gate on
- *  `committable` first — an invalid deadline would go out verbatim. */
+ *  `committable` first — an invalid deadline would go out verbatim.
+ *  Read-only fields are clipped to the backend limits (description ≤
+ *  2000 chars, subtask title ≤ 80) — an oversized AI value can't be
+ *  fixed in-app and would 422. */
 export function toTaskCreate(d: DraftProposal): TaskCreateData {
   return {
     title: d.title.trim(),
-    ...(d.description?.trim() ? { description: d.description.trim() } : {}),
+    ...(d.description?.trim() ? { description: d.description.trim().slice(0, 2000) } : {}),
     ...(d.deadline ? { due_date: `${d.deadline}T00:00:00Z` } : {}),
     priority: d.priority,
     ...(d.projectId !== null ? { project_id: d.projectId } : {}),
-    ...(d.subtasks.length > 0 ? { subtasks: d.subtasks.map((title) => ({ title })) } : {}),
+    ...(d.subtasks.length > 0
+      ? { subtasks: d.subtasks.map((title) => ({ title: title.slice(0, 80) })) }
+      : {}),
   };
+}
+
+export interface CommitJob {
+  /** Draft id — correlates the job back to its card for status updates. */
+  id: number;
+  /** X-Idempotency-Key for the create POST — the draft's stored key on a
+   *  retry, else minted via `uuid` ONCE (the caller stores it back on the
+   *  draft before posting, so a later retry replays instead of
+   *  double-creating). */
+  key: string;
+  payload: TaskCreateData;
+}
+
+/** Frozen per-card create jobs for one commit pass — payloads and keys
+ *  are captured up front so card edits can't change a request mid-flight
+ *  and every retry of the same card reuses the same key. */
+export function planJobs(drafts: DraftProposal[], uuid: () => string): CommitJob[] {
+  return committable(drafts).map((d) => ({
+    id: d.id,
+    key: d.idempotencyKey ?? uuid(),
+    payload: toTaskCreate(d),
+  }));
 }

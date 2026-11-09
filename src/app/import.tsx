@@ -9,8 +9,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import * as Crypto from 'expo-crypto';
 import * as DocumentPicker from 'expo-document-picker';
 import { File } from 'expo-file-system';
-import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { usePreventRemove, useRouter } from 'expo-router';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -23,8 +23,8 @@ import {
   View,
 } from 'react-native';
 
-import { importApi, tasksApi } from '@/api/client';
-import { committable, toDrafts, toTaskCreate, type DraftProposal } from '@/components/import/draft';
+import { ApiError, importApi, tasksApi } from '@/api/client';
+import { committable, planJobs, toDrafts, type DraftProposal } from '@/components/import/draft';
 import { ProposalCard } from '@/components/import/proposal-card';
 import { Colors, Spacing } from '@/constants/colors';
 
@@ -39,28 +39,80 @@ export default function ImportScreen() {
   const [drafts, setDrafts] = useState<DraftProposal[] | null>(null);
   const [reason, setReason] = useState<string | null>(null);
   const [committing, setCommitting] = useState(false);
+  const [commitDone, setCommitDone] = useState(false);
+  // Render state can't guard onPress — two taps before a re-render both
+  // see committing=false. Refs gate the actual work.
+  const commitInFlight = useRef(false);
+  const extractInFlight = useRef(false);
+  // Idempotency key per extract source text — a retry of the SAME text
+  // reuses it (backend replays the cached response instead of billing a
+  // second LLM call); changed text mints a new one (same key + different
+  // body would 422).
+  const extractKey = useRef<{ source: string; key: string } | null>(null);
 
   const overLimit = text.length > MAX_TEXT;
 
+  // Header back / swipe-back must not interrupt the POST loop — a pop
+  // mid-commit would hide partial-import state. v58: usePreventRemove is
+  // the stable expo-router API; with no callback the removal is blocked
+  // silently (the in-progress spinner is feedback enough).
+  usePreventRemove(committing);
+
+  // Back-nav runs in an effect, not inline in commit(): the committing=
+  // false render must lift removal prevention before GO_BACK dispatches,
+  // or the dispatch is swallowed and the user is stranded on Created cards.
+  useEffect(() => {
+    if (!commitDone) return;
+    void queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    router.back();
+  }, [commitDone, queryClient, router]);
+
   const extract = useMutation({
-    mutationFn: (source: string) => importApi.extract(source),
+    mutationFn: ({ source, key }: { source: string; key: string }) =>
+      importApi.extract(source, key),
     onSuccess: (data) => {
       setDrafts(toDrafts(data.proposals));
       setReason(data.reason);
       setInputError(null);
     },
+    onSettled: () => {
+      extractInFlight.current = false;
+    },
   });
+
+  const submitExtract = () => {
+    const source = text.trim();
+    if (source === '' || overLimit || extractInFlight.current) return;
+    extractInFlight.current = true;
+    const key =
+      extractKey.current?.source === source ? extractKey.current.key : Crypto.randomUUID();
+    extractKey.current = { source, key };
+    extract.mutate({ source, key });
+  };
 
   const pickFile = async () => {
     setInputError(null);
     try {
       const result = await DocumentPicker.getDocumentAsync({
-        type: ['text/plain', 'text/markdown'],
+        // Android providers report .md as octet-stream or x-markdown —
+        // restricting to text/plain alone greys Drive-stored notes out.
+        type: ['text/plain', 'text/markdown', 'text/x-markdown', 'application/octet-stream'],
         copyToCacheDirectory: true,
         multiple: false,
       });
       if (result.canceled) return;
       const asset = result.assets[0];
+      // The wider MIME net means the extension is the real filter.
+      if (!/\.(md|txt)$/i.test(asset.name)) {
+        setInputError('Pick a .md or .txt file.');
+        return;
+      }
+      // UTF-8 chars cost ≥1 byte each, so >40 KB guarantees >10,000 chars
+      // — reject before buffering the whole file into memory.
+      if (asset.size != null && asset.size > 40_000) {
+        setInputError(`"${asset.name}" is over the 10,000-character limit.`);
+        return;
+      }
       // The contract limit counts characters, not bytes — check after the
       // read (asset.size is bytes and would false-positive on multibyte).
       const picked = await new File(asset.uri).text();
@@ -89,18 +141,14 @@ export default function ImportScreen() {
   };
 
   const commit = async () => {
-    if (drafts === null || committing) return;
-    const targets = committable(drafts);
-    if (targets.length === 0) return;
-    setCommitting(true);
+    if (drafts === null || commitInFlight.current) return;
     // Freeze payloads + keys up front — card edits are locked while this
     // runs, and each key is stored on the draft before its POST so a retry
     // reuses it instead of minting a new one.
-    const jobs = targets.map((d) => ({
-      id: d.id,
-      key: d.idempotencyKey ?? Crypto.randomUUID(),
-      payload: toTaskCreate(d),
-    }));
+    const jobs = planJobs(drafts, () => Crypto.randomUUID());
+    if (jobs.length === 0) return;
+    commitInFlight.current = true;
+    setCommitting(true);
     setDrafts(
       (ds) =>
         ds?.map((d) => {
@@ -109,35 +157,57 @@ export default function ImportScreen() {
         }) ?? ds,
     );
     let failures = 0;
-    for (const job of jobs) {
-      try {
-        // Sequential: per-card progress stays visible and each create's
-        // idempotency key is already committed to state before it posts.
-        await tasksApi.create(job.payload, job.key);
-        setDrafts(
-          (ds) =>
-            ds?.map((d) => (d.id === job.id ? { ...d, created: true, error: null } : d)) ?? ds,
-        );
-      } catch (e) {
-        failures += 1;
-        setDrafts(
-          (ds) =>
-            ds?.map((d) =>
-              d.id === job.id
-                ? { ...d, error: e instanceof Error ? e.message : 'Create failed' }
-                : d,
-            ) ?? ds,
-        );
+    try {
+      for (const job of jobs) {
+        try {
+          // Sequential: per-card progress stays visible and each create's
+          // idempotency key is already committed to state before it posts.
+          await tasksApi.create(job.payload, job.key);
+          setDrafts(
+            (ds) =>
+              ds?.map((d) => (d.id === job.id ? { ...d, created: true, error: null } : d)) ?? ds,
+          );
+        } catch (e) {
+          // Same key + a different body means the first POST DID land —
+          // the user edited the card after a create that succeeded
+          // server-side but failed client-side (30s abort, network drop).
+          // The task exists with its earlier payload; mark it created
+          // instead of 422ing on every retry.
+          if (e instanceof ApiError && e.status === 422 && /idempotency/i.test(e.message)) {
+            setDrafts(
+              (ds) =>
+                ds?.map((d) =>
+                  d.id === job.id
+                    ? {
+                        ...d,
+                        created: true,
+                        error: 'Created with the earlier values — the first attempt went through.',
+                      }
+                    : d,
+                ) ?? ds,
+            );
+            continue;
+          }
+          failures += 1;
+          const message =
+            e instanceof ApiError && e.status === 429
+              ? `${e.message} — wait a minute and retry`
+              : e instanceof Error
+                ? e.message
+                : 'Create failed';
+          setDrafts((ds) => ds?.map((d) => (d.id === job.id ? { ...d, error: message } : d)) ?? ds);
+        }
       }
+    } finally {
+      commitInFlight.current = false;
+      setCommitting(false);
     }
-    setCommitting(false);
     const targetIds = new Set(jobs.map((j) => j.id));
     // Cards that were included but never committable (bad title/deadline)
     // block completion the same way failures do.
     const leftover = drafts.filter((d) => d.included && !d.created && !targetIds.has(d.id));
     if (failures === 0 && leftover.length === 0) {
-      void queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      router.back();
+      setCommitDone(true);
     }
   };
 
@@ -150,6 +220,7 @@ export default function ImportScreen() {
         data={drafts}
         keyExtractor={(d) => String(d.id)}
         keyboardShouldPersistTaps="handled"
+        automaticallyAdjustKeyboardInsets
         renderItem={({ item }) => (
           <ProposalCard
             draft={item}
@@ -227,8 +298,9 @@ export default function ImportScreen() {
         ) : null}
         <View style={styles.buttonRow}>
           <Pressable
-            style={styles.secondaryButton}
+            style={[styles.secondaryButton, extract.isPending && styles.disabled]}
             onPress={() => void pickFile()}
+            disabled={extract.isPending}
             accessibilityRole="button"
             accessibilityLabel="Pick a markdown or text file"
           >
@@ -240,7 +312,7 @@ export default function ImportScreen() {
               (text.trim() === '' || overLimit || extract.isPending) && styles.disabled,
             ]}
             disabled={text.trim() === '' || overLimit || extract.isPending}
-            onPress={() => extract.mutate(text.trim())}
+            onPress={submitExtract}
             accessibilityRole="button"
           >
             {extract.isPending ? (

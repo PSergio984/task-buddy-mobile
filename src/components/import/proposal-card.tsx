@@ -61,6 +61,7 @@ export function ProposalCard({ draft, busy, onChange, onRemove }: ProposalCardPr
         placeholder="Task title"
         placeholderTextColor={Colors.textMuted}
         accessibilityLabel="Task title"
+        maxLength={100}
       />
 
       {draft.included ? (
@@ -69,7 +70,11 @@ export function ProposalCard({ draft, busy, onChange, onRemove }: ProposalCardPr
           <ChipGroup
             options={PRIORITY_OPTIONS}
             selected={draft.priority}
-            onSelect={(priority) => onChange({ priority })}
+            onSelect={(priority) => {
+              // ChipGroup has no disabled state — gate the change here so
+              // priority can't diverge from the payload mid-commit.
+              if (!locked) onChange({ priority });
+            }}
           />
 
           <Text style={styles.label}>Deadline (YYYY-MM-DD, optional)</Text>

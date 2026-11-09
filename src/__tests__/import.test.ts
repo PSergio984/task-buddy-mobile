@@ -7,6 +7,7 @@ import type { ImportTaskProposal } from '@/api/types';
 import {
   committable,
   deadlineError,
+  planJobs,
   toDrafts,
   toTaskCreate,
   type DraftProposal,
@@ -116,5 +117,54 @@ describe('toTaskCreate', () => {
     expect(payload).not.toHaveProperty('project_id');
     expect(payload).not.toHaveProperty('subtasks');
     expect(payload).not.toHaveProperty('description');
+  });
+
+  it('clips read-only fields to the backend length limits', () => {
+    const payload = toTaskCreate(
+      draft({ description: ` ${'d'.repeat(2100)} `, subtasks: ['s'.repeat(100)] }),
+    );
+    expect(payload.description).toBe('d'.repeat(2000));
+    expect(payload.subtasks).toEqual([{ title: 's'.repeat(80) }]);
+  });
+});
+
+describe('planJobs', () => {
+  let minted = 0;
+  const uuid = () => `key-${++minted}`;
+
+  beforeEach(() => {
+    minted = 0;
+  });
+
+  it('mints one key per committable draft', () => {
+    const jobs = planJobs(toDrafts([proposal(), proposal()]), uuid);
+    expect(jobs.map((j) => j.key)).toEqual(['key-1', 'key-2']);
+    expect(jobs.map((j) => j.id)).toEqual([0, 1]);
+    expect(jobs[0].payload).toEqual(toTaskCreate(draft({ id: 0 })));
+  });
+
+  it('reuses the stored idempotencyKey on retry instead of re-minting', () => {
+    const first = planJobs(toDrafts([proposal()]), uuid);
+    expect(first[0].key).toBe('key-1');
+    // The screen stamps the key on the draft before posting — a retry
+    // must reuse it so the backend replays, not double-creates.
+    const retry = planJobs([draft({ idempotencyKey: first[0].key })], uuid);
+    expect(retry[0].key).toBe('key-1');
+    expect(minted).toBe(1);
+  });
+
+  it('skips created, excluded, and invalid drafts', () => {
+    const jobs = planJobs(
+      [
+        draft({ id: 0, created: true }),
+        draft({ id: 1, included: false }),
+        draft({ id: 2, title: '   ' }),
+        draft({ id: 3, deadline: 'tomorrow' }),
+        draft({ id: 4 }),
+      ],
+      uuid,
+    );
+    expect(jobs.map((j) => j.id)).toEqual([4]);
+    expect(minted).toBe(1); // one mint, only for the committable draft
   });
 });

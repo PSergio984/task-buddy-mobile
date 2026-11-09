@@ -46,6 +46,8 @@ interface RequestOptions {
   auth?: boolean;
   /** Extra headers merged into the request (e.g. X-Idempotency-Key). */
   headers?: Record<string, string>;
+  /** Abort window in ms — default 30s; the LLM extract call needs longer. */
+  timeoutMs?: number;
 }
 
 function extractDetail(data: unknown, status: number): string {
@@ -61,7 +63,14 @@ function extractDetail(data: unknown, status: number): string {
 }
 
 export async function apiFetch<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { method = 'GET', json, form, auth = true, headers: extraHeaders } = options;
+  const {
+    method = 'GET',
+    json,
+    form,
+    auth = true,
+    headers: extraHeaders,
+    timeoutMs = 30_000,
+  } = options;
 
   const headers: Record<string, string> = { ...extraHeaders };
   if (auth) {
@@ -83,7 +92,7 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
   // AbortController (not AbortSignal.timeout) — the static helper isn't
   // in the RN runtime.
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 30_000);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   let response: Response;
   try {
     response = await fetch(`${API_URL}${path}`, {
@@ -151,10 +160,16 @@ export const planApi = {
 
 export const importApi = {
   /** Notes → task proposals (backend#91). Extraction is server-side AI —
-   *  no offline path; ApiError(0) means the backend is unreachable. */
-  extract: (text: string) =>
+   *  no offline path; ApiError(0) means the backend is unreachable. The
+   *  LLM call can exceed the default 30s window, so it gets 90s, and the
+   *  X-Idempotency-Key lets a user retry replay the cached response
+   *  instead of billing a second extraction — pass the SAME key for the
+   *  SAME source text. */
+  extract: (text: string, idempotencyKey: string) =>
     apiFetch<ImportExtractResponse>('/api/v1/import/extract', {
       method: 'POST',
       json: { text },
+      headers: { 'X-Idempotency-Key': idempotencyKey },
+      timeoutMs: 90_000,
     }),
 };
