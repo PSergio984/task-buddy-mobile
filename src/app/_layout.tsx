@@ -86,6 +86,7 @@ export default function RootLayout() {
         <Stack.Screen name="login" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="task/[id]" options={{ title: 'Task' }} />
+        <Stack.Screen name="import" options={{ title: 'Import notes' }} />
         <Stack.Screen name="game" options={{ headerShown: false }} />
       </Stack>
     </QueryClientProvider>

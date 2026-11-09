@@ -551,6 +551,30 @@ export interface TimelineDayResponse {
   server_time: string;
 }
 
+/* --- Smart Import (POST /api/v1/import/extract, backend#91) --- */
+
+export interface ImportSubtaskProposal {
+  title: string;
+}
+
+/** ImportTaskProposal — one extracted candidate task. */
+export interface ImportTaskProposal {
+  title: string;
+  description: string | null;
+  /** ISO datetime. */
+  proposed_deadline: string | null;
+  priority: TaskPriority;
+  suggested_project_id: number | null;
+  subtasks: ImportSubtaskProposal[];
+}
+
+/** ImportExtractResponse — `reason` is set when extraction was degraded
+ *  (e.g. AI unavailable and the backend fell back to heuristics). */
+export interface ImportExtractResponse {
+  proposals: ImportTaskProposal[];
+  reason: string | null;
+}
+
 /* --- Auth --- */
 
 export interface AuthUser {

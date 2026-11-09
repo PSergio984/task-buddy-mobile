@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'expo-router';
+import { Link, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
@@ -106,6 +106,15 @@ export default function TasksScreen() {
         </Pressable>
       </View>
       {createTask.error ? <Text style={styles.createError}>{createTask.error.message}</Text> : null}
+      <Link href="/import" asChild>
+        <Pressable
+          style={({ pressed }) => pressed && styles.importLinkPressed}
+          accessibilityRole="button"
+          accessibilityLabel="Import notes"
+        >
+          <Text style={styles.importLinkText}>Import notes →</Text>
+        </Pressable>
+      </Link>
     </View>
   );
 
@@ -150,6 +159,13 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: Spacing.five },
   emptyText: { color: Colors.textSecondary, fontSize: 15, textAlign: 'center' },
   createError: { color: Colors.danger, fontSize: 13, marginBottom: Spacing.two },
+  importLinkPressed: { opacity: 0.6 },
+  importLinkText: {
+    color: Colors.accent,
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: Spacing.three,
+  },
   createRow: { flexDirection: 'row', gap: Spacing.two, marginBottom: Spacing.three },
   createInput: {
     flex: 1,

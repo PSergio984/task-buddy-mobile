@@ -7,7 +7,14 @@
  */
 import * as SecureStore from 'expo-secure-store';
 
-import type { PlanRequest, PlanResponse, Task, TaskCreateData, TaskListParams } from './types';
+import type {
+  ImportExtractResponse,
+  PlanRequest,
+  PlanResponse,
+  Task,
+  TaskCreateData,
+  TaskListParams,
+} from './types';
 
 export const TOKEN_STORAGE_KEY = 'task-buddy.access-token';
 
@@ -37,6 +44,8 @@ interface RequestOptions {
   form?: Record<string, string>;
   /** Skip the Bearer header (login/register). */
   auth?: boolean;
+  /** Extra headers merged into the request (e.g. X-Idempotency-Key). */
+  headers?: Record<string, string>;
 }
 
 function extractDetail(data: unknown, status: number): string {
@@ -52,9 +61,9 @@ function extractDetail(data: unknown, status: number): string {
 }
 
 export async function apiFetch<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { method = 'GET', json, form, auth = true } = options;
+  const { method = 'GET', json, form, auth = true, headers: extraHeaders } = options;
 
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = { ...extraHeaders };
   if (auth) {
     const token = await SecureStore.getItemAsync(TOKEN_STORAGE_KEY);
     if (token) headers.Authorization = `Bearer ${token}`;
@@ -124,11 +133,28 @@ export const tasksApi = {
     return apiFetch<Task[]>(`/api/v1/tasks/${qs ? `?${qs}` : ''}`);
   },
   get: (id: number) => apiFetch<Task>(`/api/v1/tasks/${id}`),
-  create: (task: TaskCreateData) =>
-    apiFetch<Task>('/api/v1/tasks/', { method: 'POST', json: task }),
+  /** `idempotencyKey` rides the X-Idempotency-Key header — the backend
+   *  middleware replays the cached response on a retry instead of
+   *  double-creating. Pass the SAME key when retrying the same create. */
+  create: (task: TaskCreateData, idempotencyKey?: string) =>
+    apiFetch<Task>('/api/v1/tasks/', {
+      method: 'POST',
+      json: task,
+      ...(idempotencyKey ? { headers: { 'X-Idempotency-Key': idempotencyKey } } : {}),
+    }),
 };
 
 export const planApi = {
   generate: (request: PlanRequest = {}) =>
     apiFetch<PlanResponse>('/api/v1/plan', { method: 'POST', json: request }),
+};
+
+export const importApi = {
+  /** Notes → task proposals (backend#91). Extraction is server-side AI —
+   *  no offline path; ApiError(0) means the backend is unreachable. */
+  extract: (text: string) =>
+    apiFetch<ImportExtractResponse>('/api/v1/import/extract', {
+      method: 'POST',
+      json: { text },
+    }),
 };
