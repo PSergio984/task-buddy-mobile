@@ -52,11 +52,9 @@ export default function ImportScreen() {
 
   const overLimit = text.length > MAX_TEXT;
 
-  // Header back / swipe-back must not interrupt the POST loop — a pop
-  // mid-commit would hide partial-import state. v58: usePreventRemove is
-  // the stable expo-router API; with no callback the removal is blocked
-  // silently (the in-progress spinner is feedback enough).
-  usePreventRemove(committing);
+  // A second pick while the picker is already open rejects and flashes a
+  // bogus error — same stale-state shape as the commit/extract guards.
+  const pickingInFlight = useRef(false);
 
   // Back-nav runs in an effect, not inline in commit(): the committing=
   // false render must lift removal prevention before GO_BACK dispatches,
@@ -64,7 +62,11 @@ export default function ImportScreen() {
   useEffect(() => {
     if (!commitDone) return;
     void queryClient.invalidateQueries({ queryKey: ['tasks'] });
-    router.back();
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/');
+    }
   }, [commitDone, queryClient, router]);
 
   const extract = useMutation({
@@ -80,6 +82,15 @@ export default function ImportScreen() {
     },
   });
 
+  // Header back / swipe-back must not interrupt the POST loop or the
+  // extract call — a pop mid-flight hides partial state, and losing the
+  // extract result also loses its key, so re-extracting identical notes
+  // bills a second LLM call. v58: usePreventRemove is the stable
+  // expo-router API; with no callback the removal is blocked silently
+  // (the in-progress spinner is feedback enough). Declared below the
+  // mutation because extract.isPending is the reactive flag.
+  usePreventRemove(committing || extract.isPending);
+
   const submitExtract = () => {
     const source = text.trim();
     if (source === '' || overLimit || extractInFlight.current) return;
@@ -91,6 +102,8 @@ export default function ImportScreen() {
   };
 
   const pickFile = async () => {
+    if (pickingInFlight.current) return;
+    pickingInFlight.current = true;
     setInputError(null);
     try {
       const result = await DocumentPicker.getDocumentAsync({
@@ -123,6 +136,8 @@ export default function ImportScreen() {
       setText(picked);
     } catch {
       setInputError('Could not read that file.');
+    } finally {
+      pickingInFlight.current = false;
     }
   };
 
@@ -294,7 +309,11 @@ export default function ImportScreen() {
         ) : null}
         {inputError ? <Text style={styles.errorText}>{inputError}</Text> : null}
         {extract.error instanceof Error ? (
-          <Text style={styles.errorText}>{extract.error.message}</Text>
+          <Text style={styles.errorText}>
+            {extract.error instanceof ApiError && extract.error.status === 429
+              ? `${extract.error.message} — wait a minute and retry`
+              : extract.error.message}
+          </Text>
         ) : null}
         <View style={styles.buttonRow}>
           <Pressable

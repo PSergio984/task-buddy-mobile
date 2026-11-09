@@ -73,7 +73,7 @@ export function committable(drafts: DraftProposal[]): DraftProposal[] {
  *  fixed in-app and would 422. */
 export function toTaskCreate(d: DraftProposal): TaskCreateData {
   return {
-    title: d.title.trim(),
+    title: d.title.trim().slice(0, 100),
     ...(d.description?.trim() ? { description: d.description.trim().slice(0, 2000) } : {}),
     ...(d.deadline ? { due_date: `${d.deadline}T00:00:00Z` } : {}),
     priority: d.priority,
