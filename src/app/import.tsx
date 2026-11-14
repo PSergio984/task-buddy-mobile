@@ -83,6 +83,10 @@ export default function ImportScreen() {
         sourceKnowledgeIdRef.current = data.source_knowledge_id;
         sourceKnowledgeTextRef.current = variables.source;
       }
+      // A 2xx response arrived — clear the cached extract key so a later
+      // re-extraction (which now carries the source_knowledge_id) mints a
+      // fresh key instead of 422ing against the previous body.
+      extractKeyCache = null;
       setDrafts(toDrafts(data.proposals));
       setReason(data.reason);
       setInputError(null);
@@ -163,8 +167,6 @@ export default function ImportScreen() {
   const startOver = () => {
     setDrafts(null);
     setReason(null);
-    sourceKnowledgeIdRef.current = null;
-    sourceKnowledgeTextRef.current = null;
     extract.reset();
   };
 

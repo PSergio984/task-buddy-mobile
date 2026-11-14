@@ -129,4 +129,15 @@ describe('importApi.extract', () => {
       }),
     );
   });
+
+  it('omits source_knowledge_id when explicitly null', async () => {
+    fetchMock.mockReturnValue(respond(200, '{"proposals":[],"reason":null}'));
+    await importApi.extract('Some notes', 'key-123', null);
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/v1/import/extract'),
+      expect.objectContaining({
+        body: JSON.stringify({ text: 'Some notes' }),
+      }),
+    );
+  });
 });
