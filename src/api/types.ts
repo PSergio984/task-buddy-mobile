@@ -43,6 +43,7 @@ export interface Task {
   priority: TaskPriority;
   project_id?: number | null;
   user_id: number;
+  source_knowledge_id?: number | null;
   created_at: string;
   updated_at: string;
   tags: Tag[];
@@ -58,6 +59,7 @@ export interface TaskCreateData {
   completed?: boolean;
   priority?: TaskPriority;
   project_id?: number;
+  source_knowledge_id?: number | null;
   tags?: string[];
   subtasks?: {
     title: string;
@@ -573,6 +575,7 @@ export interface ImportTaskProposal {
 export interface ImportExtractResponse {
   proposals: ImportTaskProposal[];
   reason: string | null;
+  source_knowledge_id?: number | null;
 }
 
 /* --- Auth --- */

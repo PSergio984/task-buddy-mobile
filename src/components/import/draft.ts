@@ -80,7 +80,7 @@ export function committable(drafts: DraftProposal[]): DraftProposal[] {
  *  Read-only fields are clipped to the backend limits (description ≤
  *  2000 chars, subtask title ≤ 80) — an oversized AI value can't be
  *  fixed in-app and would 422. */
-export function toTaskCreate(d: DraftProposal): TaskCreateData {
+export function toTaskCreate(d: DraftProposal, sourceKnowledgeId?: number | null): TaskCreateData {
   return {
     title: clip(d.title.trim(), 100),
     ...(d.description?.trim() ? { description: clip(d.description.trim(), 2000) } : {}),
@@ -89,6 +89,7 @@ export function toTaskCreate(d: DraftProposal): TaskCreateData {
     ...(d.deadline ? { due_date: `${d.deadline}T12:00:00Z` } : {}),
     priority: d.priority,
     ...(d.projectId !== null ? { project_id: d.projectId } : {}),
+    ...(sourceKnowledgeId != null ? { source_knowledge_id: sourceKnowledgeId } : {}),
     ...(d.subtasks.length > 0
       ? { subtasks: d.subtasks.map((title) => ({ title: clip(title, 80) })) }
       : {}),
@@ -109,10 +110,14 @@ export interface CommitJob {
 /** Frozen per-card create jobs for one commit pass — payloads and keys
  *  are captured up front so card edits can't change a request mid-flight
  *  and every retry of the same card reuses the same key. */
-export function planJobs(drafts: DraftProposal[], uuid: () => string): CommitJob[] {
+export function planJobs(
+  drafts: DraftProposal[],
+  uuid: () => string,
+  sourceKnowledgeId?: number | null,
+): CommitJob[] {
   return committable(drafts).map((d) => ({
     id: d.id,
     key: d.idempotencyKey ?? uuid(),
-    payload: toTaskCreate(d),
+    payload: toTaskCreate(d, sourceKnowledgeId),
   }));
 }

@@ -166,10 +166,13 @@ export const importApi = {
    *  X-Idempotency-Key lets a user retry replay the cached response
    *  instead of billing a second extraction — pass the SAME key for the
    *  SAME source text. */
-  extract: (text: string, idempotencyKey: string) =>
+  extract: (text: string, idempotencyKey: string, sourceKnowledgeId?: number | null) =>
     apiFetch<ImportExtractResponse>('/api/v1/import/extract', {
       method: 'POST',
-      json: { text },
+      json: {
+        text,
+        ...(sourceKnowledgeId != null ? { source_knowledge_id: sourceKnowledgeId } : {}),
+      },
       headers: { 'X-Idempotency-Key': idempotencyKey },
       // Outlast the backend's 120s per-key LLM lock — a shorter timeout
       // aborts while the server still holds the key, and the retry 409s.
