@@ -144,6 +144,13 @@ describe('toTaskCreate', () => {
     expect(d.title).toBe('t'.repeat(100));
     expect(toTaskCreate(d).title).toBe('t'.repeat(100));
   });
+
+  it('includes source_knowledge_id when provided, omits when null or undefined', () => {
+    const d = draft({ title: 'Task with provenance' });
+    expect(toTaskCreate(d, 42).source_knowledge_id).toBe(42);
+    expect(toTaskCreate(d, null)).not.toHaveProperty('source_knowledge_id');
+    expect(toTaskCreate(d)).not.toHaveProperty('source_knowledge_id');
+  });
 });
 
 describe('planJobs', () => {
@@ -184,5 +191,10 @@ describe('planJobs', () => {
     );
     expect(jobs.map((j) => j.id)).toEqual([4]);
     expect(minted).toBe(1); // one mint, only for the committable draft
+  });
+
+  it('forwards sourceKnowledgeId to job payloads', () => {
+    const jobs = planJobs(toDrafts([proposal()]), uuid, 88);
+    expect(jobs[0].payload.source_knowledge_id).toBe(88);
   });
 });

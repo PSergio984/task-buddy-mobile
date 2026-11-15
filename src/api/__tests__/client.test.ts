@@ -4,7 +4,7 @@
  */
 import * as SecureStore from 'expo-secure-store';
 
-import { ApiError, apiFetch, setUnauthorizedHandler } from '../client';
+import { ApiError, apiFetch, importApi, setUnauthorizedHandler } from '../client';
 
 jest.mock('expo-secure-store', () => ({
   getItemAsync: jest.fn(),
@@ -100,5 +100,44 @@ describe('401 handling', () => {
     fetchMock.mockReturnValue(respond(401, '{"detail":"bad creds"}'));
     await expect(apiFetch('/x', { auth: false })).rejects.toMatchObject({ status: 401 });
     expect(onUnauthorized).not.toHaveBeenCalled();
+  });
+});
+
+describe('importApi.extract', () => {
+  it('posts text and idempotency key without source_knowledge_id by default', async () => {
+    fetchMock.mockReturnValue(respond(200, '{"proposals":[],"reason":null}'));
+    await importApi.extract('Some notes', 'key-123');
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/v1/import/extract'),
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ 'X-Idempotency-Key': 'key-123' }),
+        body: JSON.stringify({ text: 'Some notes' }),
+      }),
+    );
+  });
+
+  it('includes source_knowledge_id in body when provided', async () => {
+    fetchMock.mockReturnValue(
+      respond(200, '{"proposals":[],"reason":null,"source_knowledge_id":99}'),
+    );
+    await importApi.extract('Some notes', 'key-123', 99);
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/v1/import/extract'),
+      expect.objectContaining({
+        body: JSON.stringify({ text: 'Some notes', source_knowledge_id: 99 }),
+      }),
+    );
+  });
+
+  it('omits source_knowledge_id when explicitly null', async () => {
+    fetchMock.mockReturnValue(respond(200, '{"proposals":[],"reason":null}'));
+    await importApi.extract('Some notes', 'key-123', null);
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/v1/import/extract'),
+      expect.objectContaining({
+        body: JSON.stringify({ text: 'Some notes' }),
+      }),
+    );
   });
 });

@@ -54,6 +54,8 @@ export default function ImportScreen() {
   // see committing=false. Refs gate the actual work.
   const commitInFlight = useRef(false);
   const extractInFlight = useRef(false);
+  const sourceKnowledgeIdRef = useRef<number | null>(null);
+  const sourceKnowledgeTextRef = useRef<string | null>(null);
   const textCount = codePoints(text);
   const overLimit = textCount > MAX_TEXT;
 
@@ -75,8 +77,16 @@ export default function ImportScreen() {
 
   const extract = useMutation({
     mutationFn: ({ source, key }: { source: string; key: string }) =>
-      importApi.extract(source, key),
-    onSuccess: (data) => {
+      importApi.extract(source, key, sourceKnowledgeIdRef.current),
+    onSuccess: (data, variables) => {
+      if (data.source_knowledge_id != null) {
+        sourceKnowledgeIdRef.current = data.source_knowledge_id;
+        sourceKnowledgeTextRef.current = variables.source;
+      }
+      // A 2xx response arrived — clear the cached extract key so a later
+      // re-extraction (which now carries the source_knowledge_id) mints a
+      // fresh key instead of 422ing against the previous body.
+      extractKeyCache = null;
       setDrafts(toDrafts(data.proposals));
       setReason(data.reason);
       setInputError(null);
@@ -96,6 +106,10 @@ export default function ImportScreen() {
   const submitExtract = () => {
     const source = text.trim();
     if (source === '' || overLimit || extractInFlight.current) return;
+    if (source !== sourceKnowledgeTextRef.current) {
+      sourceKnowledgeIdRef.current = null;
+      sourceKnowledgeTextRef.current = null;
+    }
     extractInFlight.current = true;
     const key = extractKeyCache?.source === source ? extractKeyCache.key : Crypto.randomUUID();
     extractKeyCache = { source, key };
@@ -161,7 +175,7 @@ export default function ImportScreen() {
     // Freeze payloads + keys up front — card edits are locked while this
     // runs, and each key is stored on the draft before its POST so a retry
     // reuses it instead of minting a new one.
-    const jobs = planJobs(drafts, () => Crypto.randomUUID());
+    const jobs = planJobs(drafts, () => Crypto.randomUUID(), sourceKnowledgeIdRef.current);
     if (jobs.length === 0) return;
     commitInFlight.current = true;
     setCommitting(true);
