@@ -22,6 +22,8 @@ class ExpoMotionRecorderModule : Module() {
         "CMSensorRecorder is iOS-only — no Android retro recording exists",
         null,
       )
+      @Suppress("UNREACHABLE_CODE")
+      Unit
     }
 
     AsyncFunction("stopRecording") {
@@ -30,6 +32,8 @@ class ExpoMotionRecorderModule : Module() {
         "CMSensorRecorder is iOS-only — no Android retro recording exists",
         null,
       )
+      @Suppress("UNREACHABLE_CODE")
+      Unit
     }
 
     AsyncFunction("queryAccelerometer") { _: Double, _: Double ->
@@ -40,6 +44,8 @@ class ExpoMotionRecorderModule : Module() {
         "CMSensorRecorder is iOS-only — no Android retro recording exists",
         null,
       )
+      @Suppress("UNREACHABLE_CODE")
+      emptyList<Map<String, Any>>()
     }
   }
 }
