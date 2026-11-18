@@ -62,7 +62,7 @@ export default function RootLayout() {
 
   // OTA Updates: Check for new JS bundles published via EAS/GitHub on launch
   useEffect(() => {
-    if (__DEV__) return;
+    if (__DEV__ || !Updates.isEnabled) return;
     async function onFetchUpdateAsync() {
       try {
         const update = await Updates.checkForUpdateAsync();

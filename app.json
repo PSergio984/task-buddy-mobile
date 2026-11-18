@@ -43,7 +43,6 @@
       "policy": "appVersion"
     },
     "updates": {
-      "url": "https://u.expo.dev/YOUR-EXPO-PROJECT-ID",
       "checkAutomatically": "ON_LOAD",
       "fallbackToCacheTimeout": 30000
     },
