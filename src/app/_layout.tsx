@@ -4,6 +4,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { AppState } from 'react-native';
+import * as Updates from 'expo-updates';
 
 import { hydrateAuth, useAuth } from '@/api/auth';
 import { ApiError } from '@/api/client';
@@ -58,6 +59,24 @@ export default function RootLayout() {
     });
     return () => sub.remove();
   }, [token]);
+
+  // OTA Updates: Check for new JS bundles published via EAS/GitHub on launch
+  useEffect(() => {
+    if (__DEV__) return;
+    async function onFetchUpdateAsync() {
+      try {
+        const update = await Updates.checkForUpdateAsync();
+        if (update.isAvailable) {
+          await Updates.fetchUpdateAsync();
+          await Updates.reloadAsync();
+        }
+      } catch (error) {
+        // You can also log error to your error reporting service
+        console.warn(`[OTA Update] Check error: ${error}`);
+      }
+    }
+    void onFetchUpdateAsync();
+  }, []);
 
   // Auth gate: no stored token → /login; token on /login → tasks.
   useEffect(() => {

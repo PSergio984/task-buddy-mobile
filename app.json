@@ -36,8 +36,17 @@
         {
           "motionPermission": "Allow $(PRODUCT_NAME) to verify phone-down focus sessions while the app is in the background."
         }
-      ]
+      ],
+      "expo-updates"
     ],
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/YOUR-EXPO-PROJECT-ID",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 30000
+    },
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
