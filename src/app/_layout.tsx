@@ -59,8 +59,6 @@ export default function RootLayout() {
     return () => sub.remove();
   }, [token]);
 
-
-
   // Auth gate: no stored token → /login; token on /login → tasks.
   useEffect(() => {
     if (!hydrated) return;
