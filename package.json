@@ -45,8 +45,10 @@
     "lint": "expo lint",
     "format": "prettier --write \"**/*.{ts,tsx}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx}\"",
-    "test": "jest",
-    "test:ci": "jest --coverage --watchAll=false"
+    "test": "npm run test:tokens && jest",
+    "test:ci": "npm run test:tokens && jest --coverage --watchAll=false",
+    "build:tokens": "node tools/tokens/build-tokens.js",
+    "test:tokens": "node tools/tokens/test-tokens.js"
   },
   "jest": {
     "preset": "jest-expo",
