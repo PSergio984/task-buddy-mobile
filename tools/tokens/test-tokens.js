@@ -99,28 +99,29 @@ const repoRoot = path.resolve(__dirname, '../..');
 const localWeb = path.resolve(repoRoot, 'src/styles/tokens.css');
 const localDesktop = path.resolve(repoRoot, 'src/tokens.css');
 const localMobile = path.resolve(repoRoot, 'src/constants/colors.ts');
+const normalizeLf = (s) => s.replace(/\r\n/g, '\n');
 
 if (fs.existsSync(localWeb)) {
   const current = fs.readFileSync(localWeb, 'utf8');
   assert.strictEqual(
-    current,
-    cssOutput,
+    normalizeLf(current),
+    normalizeLf(cssOutput),
     'Committed src/styles/tokens.css drifted from compiler output. Run `npm run build:tokens`.',
   );
 }
 if (fs.existsSync(localDesktop)) {
   const current = fs.readFileSync(localDesktop, 'utf8');
   assert.strictEqual(
-    current,
-    cssOutput,
+    normalizeLf(current),
+    normalizeLf(cssOutput),
     'Committed src/tokens.css drifted from compiler output. Run `npm run build:tokens`.',
   );
 }
 if (fs.existsSync(localMobile)) {
   const current = fs.readFileSync(localMobile, 'utf8');
   assert.strictEqual(
-    current,
-    tsMobileOutput,
+    normalizeLf(current),
+    normalizeLf(tsMobileOutput),
     'Committed src/constants/colors.ts drifted from compiler output. Run `npm run build:tokens`.',
   );
 }
