@@ -94,23 +94,126 @@ assert.ok(
   'Mobile TS Colors object must spread dark palette by default',
 );
 
-// 2. Pure unit compiler test with isolated fixture
-const unitFixture = structuredClone(realTokens);
-unitFixture.colors.light.bg = '#F0F0F0';
-unitFixture.colors.dark.bg = '#111111';
+// 2. Validate committed artifacts have not drifted
+const repoRoot = path.resolve(__dirname, '../..');
+const localWeb = path.resolve(repoRoot, 'src/styles/tokens.css');
+const localDesktop = path.resolve(repoRoot, 'src/tokens.css');
+const localMobile = path.resolve(repoRoot, 'src/constants/colors.ts');
 
-const unitResult = compileTokens(unitFixture);
-assert.ok(
-  unitResult.cssOutput.includes('--bg: #F0F0F0;'),
-  'Unit test: root bg should match light token',
-);
-assert.ok(
-  unitResult.cssOutput.includes('--bg: #111111;'),
-  'Unit test: dark bg should match dark token',
-);
-assert.ok(
-  unitResult.tsMobileOutput.includes("background: '#111111'"),
-  'Unit test: dark mobile background matches',
-);
+if (fs.existsSync(localWeb)) {
+  const current = fs.readFileSync(localWeb, 'utf8');
+  assert.strictEqual(
+    current,
+    cssOutput,
+    'Committed src/styles/tokens.css drifted from compiler output. Run `npm run build:tokens`.',
+  );
+}
+if (fs.existsSync(localDesktop)) {
+  const current = fs.readFileSync(localDesktop, 'utf8');
+  assert.strictEqual(
+    current,
+    cssOutput,
+    'Committed src/tokens.css drifted from compiler output. Run `npm run build:tokens`.',
+  );
+}
+if (fs.existsSync(localMobile)) {
+  const current = fs.readFileSync(localMobile, 'utf8');
+  assert.strictEqual(
+    current,
+    tsMobileOutput,
+    'Committed src/constants/colors.ts drifted from compiler output. Run `npm run build:tokens`.',
+  );
+}
+
+// 3. Pure unit compiler test with dedicated independent fixture
+const independentUnitFixture = {
+  colors: {
+    dark: {
+      bg: '#010101',
+      ink: '#EEEEEE',
+      gray50: '#050505',
+      gray100: '#101010',
+      gray200: '#202020',
+      gray300: '#303030',
+      gray400: '#404040',
+      gray500: '#505050',
+      coralAccent: '#FF0011',
+      coralTint: 'rgba(255, 0, 17, 0.2)',
+      statusLive: '#00FF11',
+      streamMobile: '#0011FF',
+      streamTauri: '#00FF22',
+    },
+    light: {
+      bg: '#FEFEFE',
+      ink: '#020202',
+      gray50: '#F9F9F9',
+      gray100: '#F1F1F1',
+      gray200: '#E1E1E1',
+      gray300: '#D1D1D1',
+      gray400: '#717171',
+      gray500: '#414141',
+      coralAccent: '#C00011',
+      coralTint: 'rgba(192, 0, 17, 0.2)',
+      statusLive: '#00C011',
+      streamMobile: '#0011C0',
+      streamTauri: '#00C022',
+    },
+  },
+  typography: {
+    fontBody: 'unit-sans',
+    fontMono: 'unit-mono',
+  },
+  radii: {
+    sm: '2px',
+    md: '4px',
+    lg: '8px',
+    pill: '999px',
+  },
+  shadows: {
+    cardDark: '0 4px 8px #000',
+    cardLight: '0 2px 4px #aaa',
+  },
+  textures: {
+    halftoneDark: 'radial-dark',
+    halftoneLight: 'radial-light',
+  },
+};
+
+const unitResult = compileTokens(independentUnitFixture);
+
+// Verify typography, radii, shadows, and textures mapping
+assert.ok(unitResult.cssOutput.includes('--font-body: unit-sans;'));
+assert.ok(unitResult.cssOutput.includes('--font-mono: unit-mono;'));
+assert.ok(unitResult.cssOutput.includes('--radius-sm: 2px;'));
+assert.ok(unitResult.cssOutput.includes('--radius-md: 4px;'));
+assert.ok(unitResult.cssOutput.includes('--radius-lg: 8px;'));
+assert.ok(unitResult.cssOutput.includes('--radius-pill: 999px;'));
+assert.ok(unitResult.cssOutput.includes('--card-shadow: 0 2px 4px #aaa;'));
+assert.ok(unitResult.cssOutput.includes('--card-shadow: 0 4px 8px #000;'));
+assert.ok(unitResult.cssOutput.includes('--halftone: radial-light;'));
+assert.ok(unitResult.cssOutput.includes('--halftone: radial-dark;'));
+
+// Verify colors mapping
+assert.ok(unitResult.cssOutput.includes('--bg: #FEFEFE;'));
+assert.ok(unitResult.cssOutput.includes('--bg: #010101;'));
+assert.ok(unitResult.cssOutput.includes('--coral-accent: #C00011;'));
+assert.ok(unitResult.cssOutput.includes('--coral-accent: #FF0011;'));
+
+// Verify mobile TS mapping
+assert.ok(unitResult.tsMobileOutput.includes("background: '#010101'"));
+assert.ok(unitResult.tsMobileOutput.includes("backgroundSelected: '#202020'"));
+assert.ok(unitResult.tsMobileOutput.includes("textSecondary: '#505050'"));
+assert.ok(unitResult.tsMobileOutput.includes("textMuted: '#404040'"));
+assert.ok(unitResult.tsMobileOutput.includes("accent: '#FF0011'"));
+assert.ok(unitResult.tsMobileOutput.includes("statusLive: '#00FF11'"));
+assert.ok(unitResult.tsMobileOutput.includes("streamMobile: '#0011FF'"));
+
+assert.ok(unitResult.tsMobileOutput.includes("background: '#FEFEFE'"));
+assert.ok(unitResult.tsMobileOutput.includes("backgroundSelected: '#E1E1E1'"));
+assert.ok(unitResult.tsMobileOutput.includes("textSecondary: '#414141'"));
+assert.ok(unitResult.tsMobileOutput.includes("textMuted: '#717171'"));
+assert.ok(unitResult.tsMobileOutput.includes("accent: '#C00011'"));
+assert.ok(unitResult.tsMobileOutput.includes("statusLive: '#00C011'"));
+assert.ok(unitResult.tsMobileOutput.includes("streamMobile: '#0011C0'"));
 
 console.log('✔ Token compiler tests passed successfully.');
