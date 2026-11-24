@@ -1,79 +1,162 @@
 import assert from 'node:assert';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { compileTokens } from './build-tokens.js';
 
-const mockTokens = {
-  colors: {
-    dark: {
-      bg: '#0C0C0F',
-      ink: '#F4F4F5',
-      gray50: '#141418',
-      gray100: '#1B1B20',
-      gray200: '#26262E',
-      gray300: '#383842',
-      gray400: '#858590',
-      gray500: '#9E9EA8',
-      coralAccent: '#FF5A36',
-      coralTint: 'rgba(255, 90, 54, 0.12)',
-      statusLive: '#10B981',
-      streamMobile: '#6366F1',
-      streamTauri: '#10B981',
-    },
-    light: {
-      bg: '#FFFFFF',
-      ink: '#0A0A0A',
-      gray50: '#FAFAFA',
-      gray100: '#F5F5F5',
-      gray200: '#E5E7EB',
-      gray300: '#D1D5DB',
-      gray400: '#9CA3AF',
-      gray500: '#6B7280',
-      coralAccent: '#E03E1A',
-      coralTint: 'rgba(224, 62, 26, 0.10)',
-      statusLive: '#059669',
-      streamMobile: '#4F46E5',
-      streamTauri: '#059669',
-    },
-  },
-  typography: {
-    fontBody: '"Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-    fontMono: '"Geist Mono", monospace',
-  },
-  radii: {
-    sm: '6px',
-    md: '10px',
-    lg: '16px',
-    pill: '9999px',
-  },
-  shadows: {
-    cardDark: '0 10px 30px -10px rgba(0, 0, 0, 0.5)',
-    cardLight: '0 10px 30px -10px rgba(0, 0, 0, 0.08)',
-  },
-  textures: {
-    halftoneDark: 'radial-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px)',
-    halftoneLight: 'radial-gradient(rgba(0, 0, 0, 0.06) 1px, transparent 1px)',
-  },
-};
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-const { cssOutput, tsMobileOutput } = compileTokens(mockTokens);
+// 1. Verify compiler against real tokens.json
+const realTokensPath = path.resolve(__dirname, 'tokens.json');
+assert.ok(fs.existsSync(realTokensPath), 'tokens.json must exist');
+const realTokens = JSON.parse(fs.readFileSync(realTokensPath, 'utf8'));
 
-assert.ok(cssOutput.includes('--bg: #0C0C0F;'), 'CSS must define dark --bg');
-assert.ok(cssOutput.includes('--coral-accent: #FF5A36;'), 'CSS must define dark --coral-accent');
+const { cssOutput, tsMobileOutput } = compileTokens(realTokens);
+
+// CSS assertion checks
+assert.ok(cssOutput.includes('color-scheme: light;'), 'CSS root must declare color-scheme: light');
+assert.ok(cssOutput.includes('--bg: #FFFFFF;'), 'CSS root must define light --bg');
 assert.ok(
-  cssOutput.includes('body[data-theme="light"]'),
-  'CSS must support data-theme light selector',
+  cssOutput.includes('--coral-accent: #C43A17;'),
+  'CSS root must define light --coral-accent',
 );
 assert.ok(
-  cssOutput.includes(mockTokens.textures.halftoneDark),
+  cssOutput.includes('color-scheme: dark;'),
+  'CSS dark theme must declare color-scheme: dark',
+);
+assert.ok(cssOutput.includes('--bg: #0C0C0F;'), 'CSS dark selector must define dark --bg');
+assert.ok(
+  cssOutput.includes('--coral-accent: #FF5A36;'),
+  'CSS dark selector must define dark --coral-accent',
+);
+assert.ok(
+  cssOutput.includes('body[data-theme="dark"]'),
+  'CSS must support data-theme dark selector',
+);
+assert.ok(
+  cssOutput.includes(realTokens.textures.halftoneDark),
   'CSS must include dark halftone texture',
 );
 assert.ok(
-  cssOutput.includes(mockTokens.textures.halftoneLight),
+  cssOutput.includes(realTokens.textures.halftoneLight),
   'CSS must include light halftone texture',
 );
+
+// Mobile TS assertion checks
 assert.ok(
   tsMobileOutput.includes("background: '#0C0C0F'"),
   'Mobile TS must export dark background',
 );
-assert.ok(tsMobileOutput.includes("accent: '#FF5A36'"), 'Mobile TS must export coral accent');
+assert.ok(tsMobileOutput.includes("border: '#26262E'"), 'Mobile TS must export dark border');
+assert.ok(
+  tsMobileOutput.includes("textSecondary: '#9E9EA8'"),
+  'Mobile TS must export dark textSecondary',
+);
+assert.ok(tsMobileOutput.includes("textMuted: '#858590'"), 'Mobile TS must export dark textMuted');
+assert.ok(tsMobileOutput.includes("accent: '#FF5A36'"), 'Mobile TS must export dark coral accent');
+assert.ok(
+  tsMobileOutput.includes("statusLive: '#10B981'"),
+  'Mobile TS must export dark statusLive',
+);
+assert.ok(
+  tsMobileOutput.includes("streamMobile: '#6366F1'"),
+  'Mobile TS must export dark streamMobile',
+);
+
+assert.ok(tsMobileOutput.includes('light = {'), 'Mobile TS must export light palette block');
+assert.ok(
+  tsMobileOutput.includes("background: '#FFFFFF'"),
+  'Mobile TS must export light background',
+);
+assert.ok(tsMobileOutput.includes("border: '#E5E7EB'"), 'Mobile TS must export light border');
+assert.ok(
+  tsMobileOutput.includes("textSecondary: '#4B5563'"),
+  'Mobile TS must export light textSecondary',
+);
+assert.ok(tsMobileOutput.includes("textMuted: '#6B7280'"), 'Mobile TS must export light textMuted');
+assert.ok(tsMobileOutput.includes("accent: '#C43A17'"), 'Mobile TS must export light coral accent');
+assert.ok(
+  tsMobileOutput.includes("statusLive: '#059669'"),
+  'Mobile TS must export light statusLive',
+);
+assert.ok(
+  tsMobileOutput.includes("streamMobile: '#4F46E5'"),
+  'Mobile TS must export light streamMobile',
+);
+
+assert.ok(
+  tsMobileOutput.includes('export const Colors = {'),
+  'Mobile TS must export Colors object',
+);
+assert.ok(
+  tsMobileOutput.includes('...dark,'),
+  'Mobile TS Colors object must spread dark palette by default',
+);
+
+// 2. Pure unit compiler test with isolated fixture
+const unitFixture = {
+  colors: {
+    dark: {
+      bg: '#111111',
+      ink: '#EEEEEE',
+      gray50: '#181818',
+      gray100: '#222222',
+      gray200: '#333333',
+      gray300: '#444444',
+      gray400: '#777777',
+      gray500: '#AAAAAA',
+      coralAccent: '#FF1100',
+      coralTint: 'rgba(255, 17, 0, 0.1)',
+      statusLive: '#00FF00',
+      streamMobile: '#0000FF',
+      streamTauri: '#00FF00',
+    },
+    light: {
+      bg: '#FFFFFF',
+      ink: '#000000',
+      gray50: '#FAFAFA',
+      gray100: '#F0F0F0',
+      gray200: '#E0E0E0',
+      gray300: '#CCCCCC',
+      gray400: '#888888',
+      gray500: '#555555',
+      coralAccent: '#CC1100',
+      coralTint: 'rgba(204, 17, 0, 0.1)',
+      statusLive: '#00CC00',
+      streamMobile: '#0000CC',
+      streamTauri: '#00CC00',
+    },
+  },
+  typography: {
+    fontBody: 'sans-serif',
+    fontMono: 'monospace',
+  },
+  radii: {
+    sm: '4px',
+    md: '8px',
+    lg: '12px',
+    pill: '999px',
+  },
+  shadows: {
+    cardDark: 'none',
+    cardLight: 'none',
+  },
+  textures: {
+    halftoneDark: 'none',
+    halftoneLight: 'none',
+  },
+};
+
+const unitResult = compileTokens(unitFixture);
+assert.ok(unitResult.cssOutput.includes('--bg: #FFFFFF;'), 'Unit test: root bg should be light');
+assert.ok(
+  unitResult.cssOutput.includes('--bg: #111111;'),
+  'Unit test: dark bg should match dark token',
+);
+assert.ok(
+  unitResult.tsMobileOutput.includes("background: '#111111'"),
+  'Unit test: dark mobile background matches',
+);
 
 console.log('✔ Token compiler tests passed successfully.');

@@ -2,5 +2,9 @@
   "name": "design-tokens",
   "version": "1.0.0",
   "type": "module",
-  "private": true
+  "private": true,
+  "scripts": {
+    "build": "node build-tokens.js",
+    "test": "node test-tokens.js"
+  }
 }
