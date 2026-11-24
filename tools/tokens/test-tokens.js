@@ -16,7 +16,7 @@ const mockTokens = {
       coralTint: 'rgba(255, 90, 54, 0.12)',
       statusLive: '#10B981',
       streamMobile: '#6366F1',
-      streamTauri: '#10B981'
+      streamTauri: '#10B981',
     },
     light: {
       bg: '#FFFFFF',
@@ -31,37 +31,49 @@ const mockTokens = {
       coralTint: 'rgba(224, 62, 26, 0.10)',
       statusLive: '#059669',
       streamMobile: '#4F46E5',
-      streamTauri: '#059669'
-    }
+      streamTauri: '#059669',
+    },
   },
   typography: {
     fontBody: '"Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-    fontMono: '"Geist Mono", monospace'
+    fontMono: '"Geist Mono", monospace',
   },
   radii: {
     sm: '6px',
     md: '10px',
     lg: '16px',
-    pill: '9999px'
+    pill: '9999px',
   },
   shadows: {
     cardDark: '0 10px 30px -10px rgba(0, 0, 0, 0.5)',
-    cardLight: '0 10px 30px -10px rgba(0, 0, 0, 0.08)'
+    cardLight: '0 10px 30px -10px rgba(0, 0, 0, 0.08)',
   },
   textures: {
     halftoneDark: 'radial-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px)',
-    halftoneLight: 'radial-gradient(rgba(0, 0, 0, 0.06) 1px, transparent 1px)'
-  }
+    halftoneLight: 'radial-gradient(rgba(0, 0, 0, 0.06) 1px, transparent 1px)',
+  },
 };
 
 const { cssOutput, tsMobileOutput } = compileTokens(mockTokens);
 
 assert.ok(cssOutput.includes('--bg: #0C0C0F;'), 'CSS must define dark --bg');
 assert.ok(cssOutput.includes('--coral-accent: #FF5A36;'), 'CSS must define dark --coral-accent');
-assert.ok(cssOutput.includes('body[data-theme="light"]'), 'CSS must support data-theme light selector');
-assert.ok(cssOutput.includes(mockTokens.textures.halftoneDark), 'CSS must include dark halftone texture');
-assert.ok(cssOutput.includes(mockTokens.textures.halftoneLight), 'CSS must include light halftone texture');
-assert.ok(tsMobileOutput.includes("background: '#0C0C0F'"), 'Mobile TS must export dark background');
+assert.ok(
+  cssOutput.includes('body[data-theme="light"]'),
+  'CSS must support data-theme light selector',
+);
+assert.ok(
+  cssOutput.includes(mockTokens.textures.halftoneDark),
+  'CSS must include dark halftone texture',
+);
+assert.ok(
+  cssOutput.includes(mockTokens.textures.halftoneLight),
+  'CSS must include light halftone texture',
+);
+assert.ok(
+  tsMobileOutput.includes("background: '#0C0C0F'"),
+  'Mobile TS must export dark background',
+);
 assert.ok(tsMobileOutput.includes("accent: '#FF5A36'"), 'Mobile TS must export coral accent');
 
 console.log('✔ Token compiler tests passed successfully.');
